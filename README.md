@@ -238,42 +238,51 @@ terceiro, e o IP de quem visita vazaria para um domínio que não é nosso. São
 
 ## Deploy (VPS Oracle Cloud, sempre gratuita)
 
-**Confira o Python primeiro.** O piso é 3.9. Oracle Linux 8 vem com 3.6 como
-`python3` padrão e não serve — instale o 3.9 e ajuste o `ExecStart` das
-unidades. Ubuntu 22.04 (3.10) e Oracle Linux 9 (3.9) funcionam de fábrica.
+Escrito para **Oracle Linux 9**, que é o que a instância roda. O `python3` dele
+é 3.9 e atende o piso — confira antes de qualquer coisa, porque no Oracle Linux
+8 o padrão é 3.6 e não serve:
 
 ```bash
 python3 --version
 ```
 
+### Instalação
+
 ```bash
-sudo useradd -r -s /usr/sbin/nologin -d /opt/hirehub hirehub
+sudo dnf install -y git nginx
+sudo useradd -r -s /sbin/nologin -d /opt/hirehub hirehub   # em Debian: /usr/sbin/nologin
 sudo git clone <repo> /opt/hirehub
 sudo chown -R hirehub:hirehub /opt/hirehub
-# O Nginx serve /static direto do disco e roda como outro usuário; sem o
-# bit de leitura para "outros", os estáticos voltam 403 e o site abre sem CSS.
+# O Nginx serve /static direto do disco e roda como outro usuário; sem o bit de
+# leitura para "outros", os estáticos voltam 403 e o site abre sem CSS.
 sudo chmod -R o+rX /opt/hirehub/web/static
 
 sudo cp deploy/hirehub-*.service deploy/hirehub-*.timer /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now hirehub-web.service hirehub-coleta.timer
 
-sudo cp deploy/nginx.conf /etc/nginx/sites-available/hirehub
-sudo ln -s /etc/nginx/sites-available/hirehub /etc/nginx/sites-enabled/
-sudo certbot --nginx -d hirehub.com.br
-sudo nginx -t && sudo systemctl reload nginx
+sudo cp deploy/nginx.conf /etc/nginx/conf.d/hirehub.conf   # em Debian: sites-available + symlink
+sudo nginx -t && sudo systemctl enable --now nginx
 ```
 
-### As duas pegadinhas da Oracle Cloud
+TLS: o certbot vem do EPEL no Oracle Linux.
 
-Elas derrubam mais deploy do que qualquer bug de código, e as duas dão o mesmo
-sintoma: a porta não responde de fora, mas `curl localhost` funciona.
+```bash
+sudo dnf install -y epel-release
+sudo dnf install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d hirehub.com.br
+```
 
-1. **Security List da VCN** — libere 80 e 443 no console da Oracle
-   (*Networking → VCN → Security Lists → Ingress Rules*). Nenhum comando na
-   máquina substitui isso.
-2. **Firewall da instância** — as imagens da Oracle já sobem com iptables
-   bloqueando tudo menos SSH:
+### As três pegadinhas da Oracle Cloud
+
+Derrubam mais deploy do que qualquer bug de código. As duas primeiras dão o
+mesmo sintoma: nada responde de fora, mas `curl localhost` funciona.
+
+**1. Security List da VCN** — libere 80 e 443 no console
+(*Networking → VCN → Security Lists → Ingress Rules*). Nenhum comando na
+máquina substitui isso.
+
+**2. Firewall da instância** — as imagens sobem bloqueando tudo menos SSH:
 
 ```bash
 # Oracle Linux
@@ -284,6 +293,42 @@ sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
 sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
 sudo netfilter-persistent save
 ```
+
+**3. SELinux (só no Oracle Linux)** — vem *enforcing* e bloqueia exatamente as
+duas coisas que o Nginx precisa fazer aqui. O sintoma é diferente das
+anteriores: **502** no site e **403** nos estáticos, com `nginx -t` dizendo que
+está tudo certo.
+
+```bash
+# deixa o Nginx conectar no Python da 8080 (sem isto: 502)
+sudo setsebool -P httpd_can_network_connect 1
+# rotula os estáticos como conteúdo servível (sem isto: 403, site sem CSS)
+sudo dnf install -y policycoreutils-python-utils
+sudo semanage fcontext -a -t httpd_sys_content_t "/opt/hirehub/web/static(/.*)?"
+sudo restorecon -Rv /opt/hirehub/web/static
+```
+
+Não desligue o SELinux para contornar. Se algo ainda for bloqueado,
+`sudo ausearch -m avc -ts recent` diz o quê.
+
+### Se a instância for a VM.Standard.E2.1.Micro (1 GB)
+
+Ela não vem com swap, e 1 GB é apertado para Oracle Linux 9 + Nginx + a coleta
+(pico medido de 203 MB). Crie 2 GB de swap para o kernel ter para onde correr:
+
+```bash
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+Desligue também os plugins do Oracle Cloud Agent que não usa (*Instance →
+Oracle Cloud Agent*): num box de 1 GB eles chegam a comer 150 MB. Bastam
+*Compute Instance Monitoring* e *Compute Instance Run Command*.
+
+Se o shape **VM.Standard.A1.Flex** (Ampere/ARM) estiver disponível na sua
+região, ele também é sempre gratuito e entrega até 4 OCPU e 24 GB — folga
+absurda para este projeto. O código é Python puro, roda em ARM sem ajuste.
 
 ### Primeira coleta
 
