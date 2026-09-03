@@ -236,6 +236,42 @@ class NoAr(unittest.TestCase):
         self.assertEqual(db.buscar(self.con, {})[0], 1)
 
 
+class IntervaloPorFonte(unittest.TestCase):
+    """A Sólides roda de 24 em 24h; as outras seguem de 6 em 6."""
+
+    def setUp(self):
+        from hirehub import coleta
+        self.coleta = coleta
+        self.cfg = {**config.PADROES}
+        self.solides = fontes.por_id("solides")
+        self.gupy = fontes.por_id("gupy")
+
+    def _ha(self, horas):
+        from datetime import datetime, timedelta, timezone
+        return {"ultima_coleta":
+                (datetime.now(timezone.utc) - timedelta(hours=horas)).isoformat()}
+
+    def test_fonte_no_intervalo_padrao_nunca_e_adiada(self):
+        self.assertEqual(self.coleta._horas_ate(self.gupy, self.cfg, self._ha(0)), 0)
+
+    def test_solides_adiada_dentro_das_24h(self):
+        self.assertGreater(self.coleta._horas_ate(self.solides, self.cfg, self._ha(6)), 0)
+        self.assertGreater(self.coleta._horas_ate(self.solides, self.cfg, self._ha(18)), 0)
+
+    def test_solides_liberada_depois_das_24h(self):
+        self.assertEqual(self.coleta._horas_ate(self.solides, self.cfg, self._ha(24)), 0)
+        self.assertEqual(self.coleta._horas_ate(self.solides, self.cfg, self._ha(30)), 0)
+
+    def test_folga_evita_perder_um_ciclo_inteiro(self):
+        """Rodada que chega 2 minutos adiantada não pode adiar por mais 24h."""
+        self.assertEqual(
+            self.coleta._horas_ate(self.solides, self.cfg, self._ha(24 - 2 / 60)), 0)
+
+    def test_fonte_nunca_coletada_roda_na_hora(self):
+        self.assertEqual(self.coleta._horas_ate(self.solides, self.cfg, None), 0)
+        self.assertEqual(self.coleta._horas_ate(self.solides, self.cfg, {}), 0)
+
+
 class InfoJobsPagina(unittest.TestCase):
     """Raspagem é parsing de HTML de terceiro — o lugar mais fácil de errar."""
 

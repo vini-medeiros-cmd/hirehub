@@ -103,8 +103,22 @@ crie `data/hirehub.config.json`:
   "detalhes_por_execucao": 400,
   "esquecer_apos_dias": 120,
   "threads": 6,
-  "intervalo_horas": 6
+  "intervalo_horas": 6,
+  "intervalo_por_fonte": { "solides": 24 }
 }
+```
+
+`intervalo_por_fonte` dá cadência própria a uma fonte sem precisar de um
+agendador separado: a rodada continua sendo de 6 em 6 horas e a fonte adiada
+simplesmente não participa. A Sólides está em 24h porque hoje devolve zero —
+insistir de 6 em 6 gasta 126s de cada coleta e bate numa API de terceiro à toa.
+Uma fonte adiada não é tocada, nem o marco de "no ar" dela, então as vagas que
+ela já trouxe continuam listadas normalmente.
+
+Pedir a fonte pelo nome ignora o intervalo, porque é execução manual:
+
+```bash
+python3 bin/coletar.py solides    # roda agora, mesmo dentro das 24h
 ```
 
 `infojobs_cidades` define a cobertura dessa fonte: o InfoJobs não tem busca
@@ -184,7 +198,9 @@ qual plataforma quebrar:
 5. **A coleta é isolada do site.** Roda como serviço separado — se travar ou
    estourar memória, o site continua respondendo.
 6. **Agendamento sem cron.** Nenhum dos ambientes tem cron; quem agenda é o
-   `hirehub-coleta.timer` do systemd (ou o `--agendar`, abaixo).
+   `hirehub-coleta.timer` do systemd (ou o `--agendar`, abaixo). A rodada é de
+   6 em 6 horas e cada fonte decide se participa — a Sólides está em 24h por
+   estar sem retorno (`intervalo_por_fonte`).
 7. **Link não confiável nunca aparece.** Vaga sem link clicável garantido é
    descartada na coleta em vez de ser exibida quebrada — é o caso das vagas da
    Sólides com id alfanumérico, vindas de integrações externas via ATS.

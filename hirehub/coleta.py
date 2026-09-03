@@ -13,7 +13,7 @@ Duas garantias moldam este arquivo:
 """
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from . import config, db, fontes, net, texto
 
@@ -55,6 +55,37 @@ def _destravar():
             config.LOCK.unlink()
     except OSError:
         pass
+
+
+def _intervalo(fonte, cfg):
+    """Horas mínimas entre duas coletas desta fonte."""
+    return int((cfg.get("intervalo_por_fonte") or {}).get(
+        fonte.id, cfg["intervalo_horas"]))
+
+
+def _horas_ate(fonte, cfg, linha):
+    """Quanto falta para esta fonte poder ser coletada de novo. 0 = pode agora.
+
+    Existe para uma fonte ter cadência própria sem precisar de um agendador
+    separado: a rodada continua sendo de 6 em 6 horas e cada fonte decide se
+    participa. Uma fonte adiada não é tocada — nem o `ultimo_ok` dela, o que
+    mantém as vagas dela no ar (ver db.NO_AR).
+    """
+    intervalo = _intervalo(fonte, cfg)
+    if intervalo <= cfg["intervalo_horas"] or not linha:
+        return 0
+    ultima = linha.get("ultima_coleta")
+    if not ultima:
+        return 0
+    try:
+        quando = datetime.fromisoformat(str(ultima).replace("Z", "+00:00"))
+    except ValueError:
+        return 0
+    passadas = (datetime.now(timezone.utc) - quando).total_seconds() / 3600
+    # Meia hora de folga: as rodadas do systemd têm RandomizedDelaySec de até
+    # 5 min, e sem a folga uma rodada que chegasse 2 minutos adiantada adiaria
+    # a fonte por um ciclo inteiro.
+    return max(0.0, intervalo - passadas - 0.5)
 
 
 def _coletar_fonte(con, fonte, cfg, carimbo):
@@ -123,10 +154,24 @@ def executar(apenas=None):
 
     try:
         con = db.abrir()
-        escolhidas = [f for f in fontes.todas() if not apenas or f.id in apenas]
-        log(f"Coletando de {len(escolhidas)} fontes: "
-            + ", ".join(f.nome for f in escolhidas))
+        pedidas = [f for f in fontes.todas() if not apenas or f.id in apenas]
 
+        # Pedir a fonte pelo nome na linha de comando ignora o intervalo: é uma
+        # execução manual, e quem digitou `coletar.py solides` quer a Sólides
+        # agora, não daqui a 19 horas.
+        estado = {f["id"]: f for f in db.status_fontes(con)}
+        escolhidas, adiadas = [], []
+        for fonte in pedidas:
+            faltam = 0 if apenas else _horas_ate(fonte, cfg, estado.get(fonte.id))
+            (adiadas if faltam > 0 else escolhidas).append((fonte, faltam))
+
+        log(f"Coletando de {len(escolhidas)} fontes: "
+            + ", ".join(f.nome for f, _ in escolhidas))
+        for fonte, faltam in adiadas:
+            log(f"  {fonte.nome}: adiada, próxima em ~{faltam:.0f}h "
+                f"(intervalo próprio de {_intervalo(fonte, cfg)}h)")
+
+        escolhidas = [f for f, _ in escolhidas]
         total_novas = sum(_coletar_fonte(con, f, cfg, carimbo) for f in escolhidas)
 
         log("Enriquecendo descrições...")

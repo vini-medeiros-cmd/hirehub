@@ -57,6 +57,14 @@ PADROES = {
     # Horas entre coletas. Usado pelo agendador e pelo aviso de "próxima
     # atualização" no site.
     "intervalo_horas": 6,
+    # Exceções por fonte, em horas. A rodada continua sendo de 6 em 6; o que
+    # muda é quais fontes participam de cada uma.
+    #
+    # A Sólides está em 24h porque hoje ela devolve zero vagas (ver o topo de
+    # fontes/solides.py). Insistir de 6 em 6 horas numa API que não responde é
+    # gastar 126s de cada coleta e bater numa plataforma de terceiro sem motivo.
+    # Uma vez por dia é o bastante para perceber quando ela voltar.
+    "intervalo_por_fonte": {"solides": 24},
 }
 
 # Modalidades canônicas. Toda fonte normaliza para uma destas.
