@@ -1,0 +1,37 @@
+/* Fontes auto-hospedadas (SIL Open Font License 1.1).
+ *
+ * Não apontamos para o Google Fonts de propósito: um <link> de folha de estilo
+ * externa é render-blocking, então a primeira pintura do HireHub passaria a
+ * depender da latência de um terceiro. Também evita expor o IP de quem visita
+ * a um domínio que não é nosso. São 4 arquivos, ~120 KB, servidos com cache
+ * longo — o custo de manter isso aqui é baixo e o ganho é medido.
+ */
+
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fontes/open-sans-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Open Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/static/fontes/open-sans-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/static/fontes/poppins-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/static/fontes/poppins-700.woff2') format('woff2');
+}

@@ -1,0 +1,37 @@
+# Site do HireHub.
+#
+#   sudo cp deploy/hirehub-*.service deploy/hirehub-*.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now hirehub-web.service hirehub-coleta.timer
+#
+# Escuta só em 127.0.0.1: quem fala com a internet é o Nginx (ver nginx.conf),
+# que cuida de TLS e compressão. Expor este processo direto na porta 80 seria
+# entregar http.server ao mundo — ele não foi feito para isso.
+
+[Unit]
+Description=HireHub — site
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=hirehub
+Group=hirehub
+WorkingDirectory=/opt/hirehub
+ExecStart=/usr/bin/python3 /opt/hirehub/bin/servir.py 127.0.0.1 8080
+Restart=always
+RestartSec=5
+
+# O serviço só lê o banco e serve arquivos. Nada aqui precisa de mais que isso.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/hirehub/data
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,262 @@
+/* HireHub — identidade visual.
+ *
+ * Duas decisões de projeto estão codificadas aqui e não são acidentais:
+ *
+ *   1. CANTOS QUADRADOS. O raio máximo é 4px (--r), e só os selos fogem disso,
+ *      justamente para se distinguirem. É o contrário da tendência de arredondar
+ *      tudo, e é o que dá ao HireHub uma cara própria entre os agregadores.
+ *
+ *   2. HIERARQUIA DE COR. Azul navega e informa, verde age e converte, preto é
+ *      conteúdo. Um botão verde na página é sempre uma candidatura — se o verde
+ *      começar a aparecer em enfeite, o CTA perde o significado.
+ */
+
+:root {
+  --verde: #1db954;
+  --verde-escuro: #169c46;
+  --azul: #0a66c2;
+  --azul-escuro: #084d92;
+  --preto: #0f0f0f;
+  --texto: #1c1c1c;
+  --suave: #5b5b5b;
+  --borda: #e3e3e3;
+  --fundo-alt: #f7f8f9;
+  --r: 3px;
+  --faixa: 1120px;
+  --titulo: "Poppins", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --corpo: "Open Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: #fff;
+  color: var(--texto);
+  font-family: var(--corpo);
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { font-family: var(--titulo); color: var(--preto); line-height: 1.25; margin: 0; }
+h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 1.35rem; font-weight: 600; }
+h3 { font-size: 1.05rem; font-weight: 600; }
+p { margin: 0 0 1rem; }
+a { color: var(--azul); text-decoration: none; }
+a:hover { color: var(--azul-escuro); text-decoration: underline; }
+img { max-width: 100%; height: auto; }
+
+.faixa { width: 100%; max-width: var(--faixa); margin: 0 auto; padding: 0 20px; }
+.bloco { padding-block: 40px 56px; }
+.centro { text-align: center; }
+
+.pular {
+  position: absolute; left: -9999px;
+  background: var(--preto); color: #fff; padding: 10px 16px; z-index: 10;
+}
+.pular:focus { left: 8px; top: 8px; }
+
+:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; }
+
+/* ------------------------------------------------------------------ topo */
+
+.topo { border-bottom: 1px solid var(--borda); background: #fff; }
+.topo .faixa { display: flex; align-items: center; gap: 24px; min-height: 68px; }
+.marca { display: flex; align-items: center; }
+.marca img { display: block; height: 38px; width: auto; }
+
+.menu { display: flex; gap: 22px; margin-left: auto; }
+.menu a { color: var(--texto); font-size: .95rem; padding: 4px 0; border-bottom: 2px solid transparent; }
+.menu a:hover { color: var(--azul); text-decoration: none; border-bottom-color: var(--borda); }
+.menu a.ativo { color: var(--azul); border-bottom-color: var(--azul); font-weight: 600; }
+
+.relogio {
+  font-size: .82rem; color: var(--suave); font-variant-numeric: tabular-nums;
+  padding-left: 22px; border-left: 1px solid var(--borda); white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------ hero */
+
+.hero { background: var(--fundo-alt); border-bottom: 1px solid var(--borda); padding-block: 56px 48px; }
+.hero h1 { font-size: 2.6rem; max-width: 15ch; }
+.hero .sub { color: var(--suave); font-size: 1.08rem; max-width: 58ch; margin-top: 14px; }
+
+.busca {
+  display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap;
+  background: #fff; border: 1px solid var(--borda); border-radius: var(--r);
+  padding: 16px; margin-top: 28px;
+}
+.busca .campo { flex: 1 1 240px; display: flex; flex-direction: column; gap: 6px; }
+.busca label { font-size: .78rem; font-weight: 600; color: var(--suave); text-transform: uppercase; letter-spacing: .04em; }
+.busca input {
+  font: inherit; padding: 11px 12px; border: 1px solid var(--borda);
+  border-radius: var(--r); background: #fff; color: var(--texto); width: 100%;
+}
+.busca input:focus { border-color: var(--azul); outline: none; box-shadow: 0 0 0 2px rgba(10,102,194,.15); }
+.busca button {
+  font-family: var(--titulo); font-weight: 600; font-size: .95rem;
+  background: var(--verde); color: #fff; border: 0; border-radius: var(--r);
+  padding: 12px 26px; cursor: pointer; min-height: 44px;
+}
+.busca button:hover { background: var(--verde-escuro); }
+.busca.compacta { margin-top: 20px; }
+
+.numeros { list-style: none; display: flex; flex-wrap: wrap; gap: 32px; margin: 26px 0 0; padding: 0; color: var(--suave); font-size: .92rem; }
+.numeros strong { display: block; font-family: var(--titulo); font-size: 1.5rem; color: var(--preto); }
+
+/* --------------------------------------------------------------- listagem */
+
+.titulo-bloco { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.ver-tudo { font-weight: 600; font-size: .95rem; }
+
+.filtros { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-top: 16px; }
+.filtro { display: flex; flex-direction: column; gap: 6px; }
+.filtro label { font-size: .78rem; font-weight: 600; color: var(--suave); text-transform: uppercase; letter-spacing: .04em; }
+.filtro select {
+  font: inherit; padding: 10px 12px; border: 1px solid var(--borda);
+  border-radius: var(--r); background: #fff; color: var(--texto); min-width: 190px;
+}
+.filtros button {
+  font: inherit; font-weight: 600; background: #fff; color: var(--azul);
+  border: 1px solid var(--azul); border-radius: var(--r); padding: 10px 20px;
+  cursor: pointer; min-height: 42px;
+}
+.filtros button:hover { background: var(--azul); color: #fff; }
+.limpar { align-self: center; font-size: .9rem; color: var(--suave); }
+
+.resultado {
+  display: flex; justify-content: space-between; align-items: baseline;
+  flex-wrap: wrap; gap: 8px; margin: 28px 0 16px;
+  padding-bottom: 12px; border-bottom: 1px solid var(--borda);
+}
+.contador { margin: 0; font-size: 1rem; }
+.contador strong { font-family: var(--titulo); font-size: 1.15rem; }
+.atualizacao { margin: 0; font-size: .85rem; color: var(--suave); }
+
+.grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+@media (max-width: 760px) { .grade { grid-template-columns: 1fr; } }
+
+.cartao {
+  position: relative; display: flex; flex-direction: column;
+  border: 1px solid var(--borda); border-radius: var(--r); padding: 20px; background: #fff;
+}
+.cartao:hover { border-color: #c9c9c9; }
+.cartao h3 { margin-bottom: 6px; padding-right: 68px; }
+.cartao h3 a { color: var(--preto); }
+.cartao h3 a:hover { color: var(--azul); text-decoration: none; }
+.empresa { color: var(--suave); margin: 0 0 12px; font-size: .95rem; }
+
+.atributos { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.atributos span {
+  font-size: .78rem; padding: 3px 9px; border-radius: 12px;
+  background: var(--fundo-alt); color: var(--suave); border: 1px solid var(--borda);
+}
+.atributos .modalidade { color: var(--azul); border-color: rgba(10,102,194,.3); background: rgba(10,102,194,.06); }
+.atributos .salario { color: var(--verde-escuro); border-color: rgba(29,185,84,.35); background: rgba(29,185,84,.08); font-weight: 600; }
+
+.rodape-cartao { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--borda); }
+.publicada { font-size: .82rem; color: var(--suave); }
+
+.cta {
+  display: inline-block; background: var(--verde); color: #fff;
+  font-family: var(--titulo); font-weight: 600; font-size: .9rem;
+  padding: 10px 20px; border-radius: var(--r); white-space: nowrap;
+}
+.cta:hover { background: var(--verde-escuro); color: #fff; text-decoration: none; }
+.cta.grande { font-size: 1rem; padding: 14px 32px; margin-top: 8px; }
+
+/* Selo arredondado de propósito: é o único elemento que foge dos cantos
+   quadrados, e é isso que o faz saltar aos olhos na grade. */
+.selo-nova {
+  position: absolute; top: 16px; right: 16px;
+  background: var(--verde); color: #fff; font-family: var(--titulo);
+  font-size: .68rem; font-weight: 700; letter-spacing: .09em;
+  padding: 3px 10px; border-radius: 999px;
+}
+.detalhe .selo-nova { position: static; display: inline-block; margin-bottom: 12px; }
+
+.vazio { color: var(--suave); padding: 40px 0; grid-column: 1 / -1; }
+
+.paginacao { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 36px; }
+.paginacao a, .paginacao span {
+  border: 1px solid var(--borda); border-radius: var(--r);
+  padding: 8px 14px; font-size: .92rem; min-width: 42px; text-align: center;
+}
+.paginacao a:hover { border-color: var(--azul); text-decoration: none; }
+.paginacao .atual { background: var(--azul); border-color: var(--azul); color: #fff; font-weight: 600; }
+
+/* --------------------------------------------------------------- detalhes */
+
+.detalhe { max-width: 800px; }
+.voltar { display: inline-block; font-size: .9rem; margin-bottom: 20px; }
+.detalhe h1 { font-size: 2.1rem; }
+.empresa-grande { font-size: 1.15rem; color: var(--suave); margin: 8px 0 22px; }
+
+.ficha { list-style: none; margin: 0 0 28px; padding: 20px; border: 1px solid var(--borda); border-radius: var(--r); background: var(--fundo-alt); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; }
+@media (max-width: 600px) { .ficha { grid-template-columns: 1fr; } }
+.ficha li { display: flex; flex-direction: column; font-size: .95rem; }
+.ficha span { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--suave); font-weight: 600; }
+
+.aviso-externo { font-size: .85rem; color: var(--suave); margin-top: 14px; }
+.descricao { margin-top: 36px; padding-top: 28px; border-top: 1px solid var(--borda); }
+.descricao h2 { margin-bottom: 16px; }
+.descricao p { white-space: pre-wrap; }
+.descricao.aviso p { color: var(--suave); }
+.relacionadas { margin-top: 44px; padding-top: 28px; border-top: 1px solid var(--borda); }
+
+/* ------------------------------------------------------------- institucional */
+
+.texto { max-width: 760px; }
+.texto h2 { margin: 32px 0 12px; }
+.texto .codigo { font-family: var(--titulo); font-size: 4rem; font-weight: 700; color: var(--borda); margin: 0; }
+.fluxo { padding-left: 20px; }
+.fluxo li { margin-bottom: 8px; }
+.contatos { list-style: none; padding: 0; }
+.contatos li { display: flex; flex-direction: column; padding: 14px 0; border-bottom: 1px solid var(--borda); }
+.contatos span { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--suave); font-weight: 600; }
+
+/* ------------------------------------------------------------------ fontes */
+
+.ponto { width: 9px; height: 9px; border-radius: 999px; background: var(--verde); flex: none; }
+.alerta .ponto { background: #e0a020; }
+.erro .ponto { background: #d33; }
+
+.tira-fontes { border-top: 1px solid var(--borda); padding: 28px 0 48px; }
+.tira-fontes h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: .07em; color: var(--suave); }
+.tira-fontes ul { list-style: none; display: flex; flex-wrap: wrap; gap: 12px 28px; padding: 0; margin: 14px 0; }
+.tira-fontes li { display: flex; align-items: center; gap: 8px; font-size: .92rem; }
+.tira-fontes em { font-style: normal; color: var(--suave); font-size: .84rem; }
+.tira-fontes > a { font-size: .88rem; }
+
+.status-fontes { list-style: none; padding: 0; margin: 24px 0 0; }
+.status-fontes li { padding: 18px 0; border-bottom: 1px solid var(--borda); }
+.linha-fonte { display: flex; align-items: center; gap: 10px; }
+.linha-fonte strong { font-family: var(--titulo); }
+.linha-fonte em { font-style: normal; font-size: .85rem; color: var(--suave); margin-left: auto; }
+.status-fontes .erro em { color: #d33; }
+.status-fontes .alerta em { color: #a06a00; }
+.detalhe-fonte, .quando { margin: 6px 0 0 19px; font-size: .85rem; color: var(--suave); }
+
+/* ------------------------------------------------------------------ rodapé */
+
+.rodape { background: var(--preto); color: #d8d8d8; margin-top: 40px; padding: 48px 0 28px; }
+.rodape a { color: #d8d8d8; }
+.rodape a:hover { color: #fff; }
+.rodape-topo { display: flex; gap: 40px; flex-wrap: wrap; justify-content: space-between; padding-bottom: 28px; }
+.rodape-marca strong { font-family: var(--titulo); font-size: 1.3rem; color: #fff; display: block; }
+.rodape-marca p { max-width: 34ch; color: #9d9d9d; margin-top: 8px; font-size: .92rem; }
+.rodape-links, .rodape-redes { display: flex; flex-direction: column; gap: 10px; font-size: .93rem; }
+.rodape-base { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-top: 1px solid #262626; padding-top: 20px; font-size: .84rem; color: #8d8d8d; }
+.rodape-base a { color: #8d8d8d; text-decoration: underline; }
+
+@media (max-width: 700px) {
+  .topo .faixa { flex-wrap: wrap; gap: 12px; padding-block: 12px; }
+  .menu { order: 3; width: 100%; margin-left: 0; justify-content: space-between; gap: 12px; }
+  .relogio { margin-left: auto; padding-left: 0; border-left: 0; }
+  .hero h1 { font-size: 2rem; }
+  .busca button { width: 100%; }
+  .filtro select { min-width: 0; width: 100%; }
+  .filtro { flex: 1 1 100%; }
+}

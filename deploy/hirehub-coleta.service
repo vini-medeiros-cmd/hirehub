@@ -1,0 +1,31 @@
+# Uma execução da coleta. Disparado pelo hirehub-coleta.timer.
+#
+# Type=oneshot de propósito: o systemd só considera a unidade encerrada quando
+# a coleta termina de verdade, então o timer nunca sobrepõe duas execuções.
+# (O lock por PID em coleta.py é a segunda linha de defesa, para execuções
+# manuais no terminal.)
+
+[Unit]
+Description=HireHub — coleta de vagas
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=hirehub
+Group=hirehub
+WorkingDirectory=/opt/hirehub
+ExecStart=/usr/bin/python3 /opt/hirehub/bin/coletar.py
+
+# Uma coleta travada não pode segurar o timer para sempre.
+TimeoutStartSec=45min
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/hirehub/data
+MemoryMax=768M
+
+[Install]
+WantedBy=multi-user.target

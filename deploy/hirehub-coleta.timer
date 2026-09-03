@@ -1,0 +1,20 @@
+# Coleta a cada 6 horas: 00:00, 06:00, 12:00 e 18:00.
+#
+# Persistent=true faz a coleta rodar assim que a máquina volta, se ela estava
+# desligada na hora marcada. Sem isso, um reboot às 05:59 pularia a rodada.
+#
+# RandomizedDelaySec espalha o disparo em até 5 minutos. É cortesia com as APIs
+# de origem: quatro plataformas recebendo milhares de requisições exatamente no
+# minuto cheio é o tipo de padrão que faz alguém bloquear o IP.
+
+[Unit]
+Description=HireHub — coleta a cada 6 horas
+
+[Timer]
+OnCalendar=00,06,12,18:00
+Persistent=true
+RandomizedDelaySec=5min
+Unit=hirehub-coleta.service
+
+[Install]
+WantedBy=timers.target

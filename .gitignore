@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/cache/
+data/hirehub.config.json
+*.log
+.env

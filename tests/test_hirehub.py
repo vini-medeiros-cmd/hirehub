@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+"""Testes do núcleo. Sem dependência: `python3 tests/test_hirehub.py`.
+
+Cobre o que quebra em silêncio — normalização e busca. Um acento perdido não
+levanta exceção nenhuma, só faz a vaga sumir dos resultados de quem procura.
+As chamadas de rede ficam de fora: conector é testado rodando `bin/coletar.py
+<fonte>` contra a API de verdade, porque o que quebra neles é a API mudar, e
+isso nenhum mock avisa.
+"""
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from hirehub import config  # noqa: E402
+
+# Banco temporário: os testes gravam de verdade, e não podem tocar em data/.
+_TMP = tempfile.TemporaryDirectory()
+config.DATA_DIR = Path(_TMP.name)
+config.BANCO = config.DATA_DIR / "teste.db"
+
+from hirehub import db, fontes, texto  # noqa: E402
+
+
+class Texto(unittest.TestCase):
+    def test_chave_busca_ignora_acento_e_caixa(self):
+        self.assertEqual(texto.chave_busca("Macaé"), "macae")
+        self.assertEqual(texto.chave_busca("SÃO PAULO"), "sao paulo")
+        self.assertEqual(texto.chave_busca("Analista", "Sênior"), "analista senior")
+
+    def test_modalidade_normaliza_vocabulario_das_fontes(self):
+        for entrada in ("REMOTE", "remoto", "Home Office", "trabalho remoto"):
+            self.assertEqual(texto.modalidade(entrada), "remote", entrada)
+        for entrada in ("hybrid", "Híbrido", "HIBRIDO"):
+            self.assertEqual(texto.modalidade(entrada), "hybrid", entrada)
+        for entrada in ("on-site", "Presencial", "ONSITE"):
+            self.assertEqual(texto.modalidade(entrada), "on-site", entrada)
+        self.assertEqual(texto.modalidade(None), "")
+        self.assertEqual(texto.modalidade("qualquer coisa"), "")
+
+    def test_local_traduz_pais_e_remove_repeticao(self):
+        self.assertEqual(texto.local("BR"), "Brasil")
+        self.assertEqual(texto.local("São Paulo", "São Paulo"), "São Paulo")
+        # A Gupy manda cidade sem acento e estado com acento, no mesmo registro.
+        self.assertEqual(texto.local("Sao Paulo", "São Paulo"), "São Paulo")
+        self.assertEqual(texto.local("São Paulo", "Sao Paulo"), "São Paulo")
+        self.assertEqual(texto.local("Macaé", "RJ", "Brasil"), "Macaé, RJ")
+        self.assertEqual(texto.local("Rio de Janeiro, BR"), "Rio de Janeiro")
+        self.assertEqual(texto.local(None, "", None), "")
+
+    def test_data_iso_aceita_os_formatos_das_quatro_fontes(self):
+        self.assertTrue(texto.data_iso("2026-09-03T10:00:00Z").startswith("2026-09-03"))
+        self.assertTrue(texto.data_iso("2026-09-03T10:00:00").startswith("2026-09-03"))
+        self.assertTrue(texto.data_iso(1756900000).startswith("2025-"))
+        self.assertIsNone(texto.data_iso("ontem"))
+        self.assertIsNone(texto.data_iso(None))
+
+    def test_html_vira_texto_sem_tags(self):
+        bruto = "<p>Vaga <strong>&ccedil;</strong></p><ul><li>Python</li></ul><script>x</script>"
+        saida = texto.texto_de_html(bruto)
+        self.assertNotIn("<", saida)
+        self.assertIn("ç", saida)
+        self.assertIn("Python", saida)
+
+    def test_id_da_vaga_e_estavel(self):
+        link = "https://exemplo.gupy.io/job/123"
+        self.assertEqual(texto.id_da_vaga(link), texto.id_da_vaga(link))
+        self.assertNotEqual(texto.id_da_vaga(link), texto.id_da_vaga(link + "4"))
+        self.assertEqual(len(texto.id_da_vaga(link)), 12)
+
+
+def _vaga(**campos):
+    base = {
+        "link": "https://exemplo.com/vaga/1", "titulo": "Analista de Sistemas",
+        "empresa": "Empresa XYZ", "fonte": "gupy", "local": "Macaé, RJ",
+        "modalidade": "hybrid", "salario": "", "descricao": None,
+        "publicada_em": "2026-09-03T09:00:00+00:00",
+    }
+    return {**base, **campos}
+
+
+class Banco(unittest.TestCase):
+    def setUp(self):
+        config.BANCO.unlink(missing_ok=True)
+        self.con = db.abrir()
+
+    def tearDown(self):
+        self.con.close()
+
+    def test_salvar_conta_so_as_ineditas(self):
+        self.assertEqual(db.salvar(self.con, [_vaga()], "c1"), 1)
+        self.assertEqual(db.salvar(self.con, [_vaga()], "c2"), 0)
+        self.assertEqual(db.salvar(self.con, [_vaga(link="https://x/2")], "c2"), 1)
+
+    def test_recoleta_preserva_vista_em_e_descricao(self):
+        """O ponto do COALESCE em salvar(): a listagem seguinte vem sem
+        descrição e não pode apagar o que o enriquecimento buscou."""
+        db.salvar(self.con, [_vaga()], "c1")
+        id_vaga = texto.id_da_vaga(_vaga()["link"])
+        db.gravar_detalhes(self.con, [(id_vaga, {"descricao": "Texto completo"})])
+
+        db.salvar(self.con, [_vaga(titulo="Analista Pleno")], "c2")
+        linha = db.por_id(self.con, id_vaga)
+        self.assertEqual(linha["descricao"], "Texto completo")
+        self.assertEqual(linha["vista_em"], "c1")
+        self.assertEqual(linha["titulo"], "Analista Pleno")  # esse SIM atualiza
+        self.assertEqual(linha["coleta"], "c2")
+
+    def test_detalhe_sem_sucesso_nao_e_retentado_para_sempre(self):
+        db.salvar(self.con, [_vaga(fonte="inhire")], "c1")
+        pendentes = db.pendentes_detalhe(self.con, "inhire", 10)
+        self.assertEqual(len(pendentes), 1)
+
+        db.gravar_detalhes(self.con, [(pendentes[0]["id"], None)])
+        self.assertEqual(db.pendentes_detalhe(self.con, "inhire", 10), [])
+
+    def test_busca_ignora_acento_e_exige_todas_as_palavras(self):
+        db.salvar(self.con, [_vaga()], "c1")
+        for termo in ("macae", "Macaé", "MACAE"):
+            self.assertEqual(db.buscar(self.con, {"local": termo})[0], 1, termo)
+        self.assertEqual(db.buscar(self.con, {"q": "analista sistemas"})[0], 1)
+        self.assertEqual(db.buscar(self.con, {"q": "sistemas analista"})[0], 1)
+        self.assertEqual(db.buscar(self.con, {"q": "analista python"})[0], 0)
+
+    def test_filtros_combinam(self):
+        db.salvar(self.con, [
+            _vaga(),
+            _vaga(link="https://x/2", modalidade="remote", fonte="inhire"),
+        ], "c1")
+        self.assertEqual(db.buscar(self.con, {"modalidade": "remote"})[0], 1)
+        self.assertEqual(db.buscar(self.con, {"fonte": "gupy"})[0], 1)
+        self.assertEqual(db.buscar(self.con, {"fonte": "gupy", "modalidade": "remote"})[0], 0)
+        self.assertEqual(db.buscar(self.con, {})[0], 2)
+
+    def test_vaga_sem_data_vai_para_o_fim(self):
+        db.salvar(self.con, [
+            _vaga(link="https://x/sem", publicada_em=None),
+            _vaga(link="https://x/com"),
+        ], "c1")
+        _, vagas = db.buscar(self.con, {})
+        self.assertIsNotNone(vagas[0]["publicada_em"])
+        self.assertIsNone(vagas[-1]["publicada_em"])
+
+    def test_podar_remove_so_o_que_e_velho(self):
+        db.salvar(self.con, [_vaga()], "2020-01-01T00:00:00+00:00")
+        db.salvar(self.con, [_vaga(link="https://x/2")], texto.agora_iso())
+        self.assertEqual(db.podar(self.con, 60), 1)
+        self.assertEqual(db.contagens(self.con)["total"], 1)
+
+
+class Conectores(unittest.TestCase):
+    def test_todos_se_registram_com_contrato_valido(self):
+        registradas = fontes.todas()
+        self.assertGreaterEqual(len(registradas), 4)
+        for fonte in registradas:
+            self.assertTrue(fonte.id and fonte.nome, fonte)
+            self.assertTrue(callable(fonte.coletar), fonte.id)
+            self.assertIs(fontes.por_id(fonte.id), fonte)
+
+    def test_ids_conferem_com_o_que_os_conectores_gravam(self):
+        """Se um conector devolvesse `fonte` diferente do próprio id, o filtro
+        por plataforma pararia de achar as vagas dele — sem erro nenhum."""
+        self.assertEqual(
+            {f.id for f in fontes.todas()},
+            {"gupy", "inhire", "infojobs", "solides"},
+        )
+
+
+class Paginas(unittest.TestCase):
+    """Renderiza cada página com dados reais do banco.
+
+    Existe porque a renderização quebra por campo faltando, não por lógica: a
+    consulta de vagas relacionadas não trazia `link`, e o cartão só descobria
+    isso ao montar o botão Candidatar-se — um 500 na página de detalhes que
+    nenhum teste de `db` pegaria.
+    """
+
+    def setUp(self):
+        from datetime import datetime
+
+        from web import paginas
+        self.paginas = paginas
+
+        config.BANCO.unlink(missing_ok=True)
+        self.con = db.abrir()
+        db.salvar(self.con, [
+            _vaga(descricao="Linha um.\n\nLinha dois."),
+            _vaga(link="https://x/2", titulo="Analista de Dados", fonte="inhire"),
+        ], texto.agora_iso())
+        db.anotar_fonte(self.con, "gupy", "Gupy", ultimo_ok="c1", vagas=10, erro=None)
+
+        registradas = fontes.todas()
+        self.ctx = {
+            "rota": "/", "agora": datetime.now(paginas.FUSO),
+            "meta": db.ler_meta(self.con), "contagens": db.contagens(self.con),
+            "status_fontes": db.status_fontes(self.con),
+            "fontes_registradas": registradas,
+            "fontes_por_id": {f.id: f.nome for f in registradas},
+        }
+
+    def tearDown(self):
+        self.con.close()
+
+    def _valida(self, html):
+        self.assertIn("</html>", html)
+        self.assertNotIn("None", html)
+        return html
+
+    def test_todas_as_paginas_renderizam(self):
+        _, vagas = db.buscar(self.con, {})
+        vaga = db.por_id(self.con, vagas[0]["id"])
+        self._valida(self.paginas.home(self.ctx, vagas, self.ctx["status_fontes"]))
+        self._valida(self.paginas.listagem(self.ctx, {"q": "analista"}, 0, 2, vagas,
+                                           self.ctx["status_fontes"]))
+        self._valida(self.paginas.detalhes(
+            self.ctx, vaga, db.relacionadas(self.con, vaga)))
+        self._valida(self.paginas.sobre(self.ctx))
+        self._valida(self.paginas.contato(self.ctx))
+        self._valida(self.paginas.status(self.ctx, self.ctx["status_fontes"]))
+        self._valida(self.paginas.erro(self.ctx, 404, "Não encontrada"))
+
+    def test_pagina_vazia_nao_quebra(self):
+        vazio = {**self.ctx, "contagens": {"total": 0, "novas": 0, "empresas": 0},
+                 "status_fontes": [], "meta": {}}
+        self._valida(self.paginas.home(vazio, [], []))
+        self._valida(self.paginas.listagem(vazio, {}, 0, 0, [], []))
+        self._valida(self.paginas.status(vazio, []))
+
+    def test_dado_de_terceiro_e_escapado(self):
+        """Títulos e descrições vêm de quatro plataformas. Um `<script>` num
+        deles não pode chegar inteiro à página."""
+        ataque = '<script>alert("x")</script>'
+        db.salvar(self.con, [_vaga(link="https://x/3", titulo=ataque,
+                                   empresa=ataque, descricao=ataque)], "c9")
+        vaga = db.por_id(self.con, texto.id_da_vaga("https://x/3"))
+        html = self.paginas.detalhes(self.ctx, vaga, [])
+        self.assertNotIn("<script>", html)
+        self.assertIn("&lt;script&gt;", html)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
