@@ -159,8 +159,11 @@ img { max-width: 100%; height: auto; }
 .rodape-cartao { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--borda); }
 .publicada { font-size: .82rem; color: var(--suave); }
 
+/* min-height 44px é o alvo de toque mínimo: no celular este botão é a ação
+   principal da página inteira, e ele estava saindo com 43px. */
 .cta {
-  display: inline-block; background: var(--verde); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 44px; background: var(--verde); color: #fff;
   font-family: var(--titulo); font-weight: 600; font-size: .9rem;
   padding: 10px 20px; border-radius: var(--r); white-space: nowrap;
 }

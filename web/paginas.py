@@ -35,6 +35,25 @@ MODALIDADES = [
 NAV = [("/", "Início"), ("/vagas", "Vagas"), ("/sobre", "Sobre"), ("/contato", "Contato")]
 
 
+def _versao_estaticos():
+    """Sufixo ?v= para CSS e imagens, derivado do arquivo mais recente.
+
+    Sem isto, o `expires 30d; immutable` do Nginx entregaria o CSS antigo por
+    até um mês depois de um deploy — e ninguém liga o layout quebrado do
+    visitante a uma mudança feita semanas antes. Calculado uma vez, na carga do
+    módulo: o processo reinicia a cada deploy, que é exatamente quando o valor
+    precisa mudar.
+    """
+    try:
+        return str(int(max(a.stat().st_mtime
+                           for a in config.ESTATICOS.rglob("*") if a.is_file())))
+    except ValueError:
+        return "0"
+
+
+VERSAO = _versao_estaticos()
+
+
 def e(valor):
     """Escapa para HTML. Ponto de passagem obrigatório de todo dado externo."""
     return html.escape(str(valor if valor is not None else ""), quote=True)
@@ -105,7 +124,7 @@ def _cabecalho(ctx):
 <header class="topo">
   <div class="faixa">
     <a class="marca" href="/" aria-label="HireHub — página inicial">
-      <img src="/static/img/logo.jpeg" alt="HireHub" width="132" height="45">
+      <img src="/static/img/logo.jpeg?v={VERSAO}" alt="HireHub" width="132" height="45">
     </a>
     <nav class="menu" aria-label="Principal">{itens}</nav>
     <time class="relogio" datetime="{e(ctx['agora'].isoformat())}">
@@ -163,8 +182,8 @@ def layout(ctx, titulo, conteudo, descricao="", canonica=""):
 <meta property="og:type" content="website">
 <meta property="og:locale" content="pt_BR">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/fontes.css">
-<link rel="stylesheet" href="/static/estilo.css">
+<link rel="stylesheet" href="/static/fontes.css?v={VERSAO}">
+<link rel="stylesheet" href="/static/estilo.css?v={VERSAO}">
 </head>
 <body>
 {_cabecalho(ctx)}
