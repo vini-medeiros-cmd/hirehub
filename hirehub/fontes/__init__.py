@@ -33,6 +33,19 @@ class Fonte:
     nome = ""
     site = ""
 
+    # A fonte devolve TODAS as vagas publicadas, ou só uma janela delas?
+    #
+    # É o que decide se "esta vaga não veio na última coleta" pode ser lido como
+    # "esta vaga foi encerrada". Numa fonte exaustiva, pode. Numa fonte com
+    # janela — a Gupy entrega as 10.000 mais recentes, o InfoJobs as primeiras
+    # páginas de cada cidade —, a vaga some da coleta porque chegaram outras
+    # mais novas, e concluir que fechou marca como morta uma vaga aberta
+    # publicada hoje. Medido: numa coleta só da Gupy, 1.740 vagas publicadas nos
+    # últimos 3 dias saíram da janela e seriam escondidas do site.
+    #
+    # Só quem marca True participa da regra de "saiu do ar" (ver db.NO_AR).
+    cobertura_completa = False
+
     def coletar(self, cfg, log):
         raise NotImplementedError
 

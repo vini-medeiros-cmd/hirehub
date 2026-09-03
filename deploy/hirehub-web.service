@@ -18,6 +18,12 @@ Type=simple
 User=hirehub
 Group=hirehub
 WorkingDirectory=/opt/hirehub
+
+# TROQUE PELO DOMÍNIO REAL antes de publicar. Daqui saem as URLs canônicas, o
+# sitemap.xml e o robots.txt — errado aqui, os buscadores indexam um endereço
+# que não existe.
+Environment=HIREHUB_URL=https://hirehub.com.br
+
 ExecStart=/usr/bin/python3 /opt/hirehub/bin/servir.py 127.0.0.1 8080
 Restart=always
 RestartSec=5

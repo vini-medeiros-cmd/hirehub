@@ -49,23 +49,41 @@ CREATE TABLE IF NOT EXISTS fontes (
   vagas         INTEGER DEFAULT 0,
   novas         INTEGER DEFAULT 0,
   duracao       REAL,
-  erro          TEXT
+  erro          TEXT,
+  -- A fonte entrega tudo ou só uma janela? Decide se ela pode marcar vagas
+  -- como "saiu do ar". Ver fontes.Fonte.cobertura_completa e NO_AR.
+  cobertura_completa INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS meta (chave TEXT PRIMARY KEY, valor TEXT);
 """
 
 
+# Colunas acrescentadas depois que já havia banco em produção. CREATE TABLE IF
+# NOT EXISTS não altera tabela existente, então elas entram por ALTER.
+MIGRACOES = [("fontes", "cobertura_completa", "INTEGER DEFAULT 0")]
+
+
+def _migrar(con):
+    for tabela, coluna, tipo in MIGRACOES:
+        existentes = {c["name"] for c in con.execute(f"PRAGMA table_info({tabela})")}
+        if coluna not in existentes:
+            con.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}")
+    con.commit()
+
+
 def abrir(somente_leitura=False):
     config.DATA_DIR.mkdir(parents=True, exist_ok=True)
     if somente_leitura and config.BANCO.exists():
         con = sqlite3.connect(f"file:{config.BANCO}?mode=ro", uri=True)
-    else:
-        con = sqlite3.connect(config.BANCO)
-        # WAL deixa o site ler enquanto a coleta escreve, sem travar a página.
-        con.execute("PRAGMA journal_mode=WAL")
-        con.executescript(ESQUEMA)
+        con.row_factory = sqlite3.Row
+        return con
+    con = sqlite3.connect(config.BANCO)
+    # WAL deixa o site ler enquanto a coleta escreve, sem travar a página.
+    con.execute("PRAGMA journal_mode=WAL")
+    con.executescript(ESQUEMA)
     con.row_factory = sqlite3.Row
+    _migrar(con)
     return con
 
 
@@ -223,19 +241,28 @@ def status_fontes(con):
     return [dict(l) for l in linhas]
 
 
-# "No ar" = a vaga foi vista na última coleta BEM-SUCEDIDA DA PRÓPRIA FONTE.
+# "No ar" = a vaga foi vista na última coleta BEM-SUCEDIDA DA PRÓPRIA FONTE,
+# e só vale para fontes de cobertura exaustiva.
 #
-# Comparar com a última coleta global seria errado: se a InHire falhasse numa
-# rodada, as 8.900 vagas dela ficariam com `coleta` mais antigo que o carimbo
-# global e sumiriam do site em bloco — 45% do catálogo apagado por um blip de
-# rede. Ancorando em `fontes.ultimo_ok`, uma fonte que falhou simplesmente não
-# move o próprio marco, e as vagas dela seguem no ar até a próxima coleta que
-# realmente der certo.
+# Duas condições, cada uma corrigindo um jeito de esconder vaga aberta:
 #
-# COALESCE cobre a fonte que ainda não tem linha em `fontes` (base recém-criada):
-# sem ele, a comparação com NULL derrubaria tudo para "fora do ar".
-NO_AR = ("vagas.coleta >= COALESCE("
-         "(SELECT ultimo_ok FROM fontes WHERE fontes.id = vagas.fonte), vagas.coleta)")
+#   * `fontes.ultimo_ok`, e não a última coleta global. Se a InHire falhasse
+#     numa rodada, as 8.900 vagas dela ficariam com `coleta` mais antigo que o
+#     carimbo global e sumiriam em bloco — 45% do catálogo apagado por um blip
+#     de rede. A fonte que falha não move o próprio marco.
+#
+#   * `cobertura_completa = 1`. Numa fonte com janela, a vaga some da coleta
+#     porque chegaram outras mais novas, não porque fechou. Medido: uma coleta
+#     só da Gupy tirou do ar 1.740 vagas publicadas nos últimos 3 dias, todas
+#     abertas. Fontes com janela nunca marcam nada como fora do ar — envelhecem
+#     por `esquecer_apos_dias`, e é só.
+#
+# O COALESCE é o que faz a segunda condição funcionar: a subconsulta não devolve
+# linha para fonte com janela (nem para fonte ainda sem registro, numa base
+# recém-criada), e aí a vaga é comparada consigo mesma — sempre no ar.
+NO_AR = ("vagas.coleta >= COALESCE((SELECT ultimo_ok FROM fontes "
+         "WHERE fontes.id = vagas.fonte AND fontes.cobertura_completa = 1), "
+         "vagas.coleta)")
 
 
 def _filtros(criterios):

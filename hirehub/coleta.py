@@ -98,6 +98,7 @@ def _coletar_fonte(con, fonte, cfg, carimbo):
         db.anotar_fonte(
             con, fonte.id, fonte.nome, ultima_coleta=carimbo, ultimo_ok=carimbo,
             vagas=len(vagas), novas=novas, duracao=duracao, erro=None,
+            cobertura_completa=int(fonte.cobertura_completa),
         )
         log(f"  {fonte.nome}: {len(vagas)} vagas ({novas} novas) em {duracao:.0f}s")
         return novas

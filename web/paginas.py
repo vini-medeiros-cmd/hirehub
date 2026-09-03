@@ -17,7 +17,28 @@ from zoneinfo import ZoneInfo
 
 from hirehub import config, db, texto
 
-FUSO = ZoneInfo("America/Sao_Paulo")
+
+def _fuso():
+    """America/Sao_Paulo, ou UTC-3 fixo se a máquina não tiver tzdata.
+
+    Imagens mínimas de VPS (a da Oracle inclusive) costumam vir sem o banco de
+    fusos, e ZoneInfo levanta na hora do import — o site inteiro não subiria por
+    causa do relógio do cabeçalho. Um `pip install tzdata` resolveria, mas o
+    projeto não tem dependências e não vai ganhar uma por isso.
+
+    O fallback é exato, não uma aproximação: o Brasil acabou com o horário de
+    verão em 2019, então São Paulo é UTC-3 o ano inteiro. Se o horário de verão
+    voltar, este ramo passa a errar 1h no verão e aí sim vale instalar tzdata.
+    """
+    try:
+        return ZoneInfo("America/Sao_Paulo")
+    except Exception:
+        print("[hirehub] tzdata ausente; usando UTC-3 fixo para o horário de Brasília.",
+              flush=True)
+        return timezone(timedelta(hours=-3))
+
+
+FUSO = _fuso()
 
 DATAS = [
     ("1", "Últimas 24 horas"),
@@ -115,10 +136,15 @@ def numero(n):
 # ------------------------------------------------------------------ layout
 
 def _cabecalho(ctx):
-    itens = "".join(
-        f'<a href="{caminho}"{" class=\'ativo\'" if ctx["rota"] == caminho else ""}>{rotulo}</a>'
-        for caminho, rotulo in NAV
-    )
+    # A classe sai da f-string de propósito. Escrita embutida, ela precisava de
+    # uma barra invertida dentro da expressão — e isso só passa a compilar no
+    # Python 3.12 (PEP 701). Na VPS, que roda 3.9 ou 3.10, era SyntaxError: o
+    # site não subia por causa de uma aspa escapada no menu.
+    def item(caminho, rotulo):
+        classe = ' class="ativo"' if ctx["rota"] == caminho else ""
+        return f'<a href="{caminho}"{classe}>{rotulo}</a>'
+
+    itens = "".join(item(caminho, rotulo) for caminho, rotulo in NAV)
     return f"""
 <a class="pular" href="#conteudo">Pular para o conteúdo</a>
 <header class="topo">

@@ -18,7 +18,7 @@ cliquei → me candidatei. A complexidade fica nos bastidores.
 
 ## Como rodar
 
-Não há nada para instalar. Python 3.11+ e só a biblioteca padrão.
+Não há nada para instalar. Python 3.9+ e só a biblioteca padrão.
 
 ```bash
 python3 bin/coletar.py     # roda uma coleta (~2 a 10 min)
@@ -238,10 +238,21 @@ terceiro, e o IP de quem visita vazaria para um domínio que não é nosso. São
 
 ## Deploy (VPS Oracle Cloud, sempre gratuita)
 
+**Confira o Python primeiro.** O piso é 3.9. Oracle Linux 8 vem com 3.6 como
+`python3` padrão e não serve — instale o 3.9 e ajuste o `ExecStart` das
+unidades. Ubuntu 22.04 (3.10) e Oracle Linux 9 (3.9) funcionam de fábrica.
+
+```bash
+python3 --version
+```
+
 ```bash
 sudo useradd -r -s /usr/sbin/nologin -d /opt/hirehub hirehub
 sudo git clone <repo> /opt/hirehub
 sudo chown -R hirehub:hirehub /opt/hirehub
+# O Nginx serve /static direto do disco e roda como outro usuário; sem o
+# bit de leitura para "outros", os estáticos voltam 403 e o site abre sem CSS.
+sudo chmod -R o+rX /opt/hirehub/web/static
 
 sudo cp deploy/hirehub-*.service deploy/hirehub-*.timer /etc/systemd/system/
 sudo systemctl daemon-reload
@@ -253,21 +264,59 @@ sudo certbot --nginx -d hirehub.com.br
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Primeira coleta na mão, para o site não subir vazio:
+### As duas pegadinhas da Oracle Cloud
+
+Elas derrubam mais deploy do que qualquer bug de código, e as duas dão o mesmo
+sintoma: a porta não responde de fora, mas `curl localhost` funciona.
+
+1. **Security List da VCN** — libere 80 e 443 no console da Oracle
+   (*Networking → VCN → Security Lists → Ingress Rules*). Nenhum comando na
+   máquina substitui isso.
+2. **Firewall da instância** — as imagens da Oracle já sobem com iptables
+   bloqueando tudo menos SSH:
+
+```bash
+# Oracle Linux
+sudo firewall-cmd --permanent --add-service=http --add-service=https
+sudo firewall-cmd --reload
+# Ubuntu (as imagens da Oracle trazem regras iptables, não só o ufw)
+sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
+sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
+sudo netfilter-persistent save
+```
+
+### Primeira coleta
+
+Na mão, para o site não subir vazio:
 
 ```bash
 sudo -u hirehub python3 /opt/hirehub/bin/coletar.py
 ```
 
-Acompanhando depois:
+Vale rodar o backfill de descrições logo em seguida, com
+`detalhes_por_execucao` alto (veja *Configuração*).
+
+### Recursos
+
+Medido: pico de **203 MB** de RSS na coleta, ~87 MB de banco com 21 mil vagas.
+Os `MemoryMax` das unidades (768 MB na coleta, 512 MB no site) têm folga
+confortável até no shape x86 de 1 GB. O `VACUUM` ao fim da coleta chega a
+dobrar o arquivo temporariamente — reserve o dobro do banco em disco.
+
+### Acompanhando
 
 ```bash
 systemctl list-timers hirehub-coleta.timer
 journalctl -u hirehub-coleta.service -n 50
+journalctl -u hirehub-web.service -f
 ```
 
-Ajuste `HIREHUB_URL` (ou `SITE["url"]` em `config.py`) para o domínio real —
-é o que entra nas URLs canônicas, no sitemap e no `robots.txt`.
+Se `journalctl` mostrar `tzdata ausente`, o site está usando UTC-3 fixo — está
+correto para o horário de Brasília, mas `dnf install tzdata` restaura o fuso
+oficial.
+
+**Ajuste `HIREHUB_URL`** no `hirehub-web.service` para o domínio real: é o que
+entra nas URLs canônicas, no sitemap e no `robots.txt`.
 
 ---
 

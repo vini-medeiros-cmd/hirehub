@@ -30,6 +30,10 @@ class InHire(Fonte):
     id = "inhire"
     nome = "InHire"
     site = "https://inhire.app"
+    # Única das quatro: sem teto de paginação, cada empresa devolve o mural
+    # inteiro. Por isso é a única em que "não veio na coleta" significa mesmo
+    # "a vaga foi encerrada" — ver Fonte.cobertura_completa.
+    cobertura_completa = True
 
     def coletar(self, cfg, log):
         empresas = self._empresas()

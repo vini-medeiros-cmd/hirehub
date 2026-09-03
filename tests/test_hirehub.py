@@ -7,6 +7,7 @@ As chamadas de rede ficam de fora: conector é testado rodando `bin/coletar.py
 <fonte>` contra a API de verdade, porque o que quebra neles é a API mudar, e
 isso nenhum mock avisa.
 """
+import re
 import sys
 import tempfile
 import unittest
@@ -178,10 +179,29 @@ class NoAr(unittest.TestCase):
     def tearDown(self):
         self.con.close()
 
-    def _coleta(self, carimbo, vagas, fonte="gupy", nome="Gupy"):
-        db.salvar(self.con, vagas, carimbo)
+    def _coleta(self, carimbo, vagas, fonte="inhire", nome="InHire", completa=True):
+        # A vaga sempre pertence à fonte que a coletou; deixar divergir faria o
+        # teste medir uma combinação que a coleta real nunca produz.
+        db.salvar(self.con, [{**v, "fonte": fonte} for v in vagas], carimbo)
         db.anotar_fonte(self.con, fonte, nome, ultima_coleta=carimbo,
-                        ultimo_ok=carimbo, vagas=len(vagas), erro=None)
+                        ultimo_ok=carimbo, vagas=len(vagas), erro=None,
+                        cobertura_completa=int(completa))
+
+    def test_fonte_com_janela_nunca_marca_vaga_como_fora_do_ar(self):
+        """A regra que 1.740 vagas abertas da Gupy pagaram para existir.
+
+        A Gupy entrega as 10.000 mais recentes: a vaga sai da janela porque
+        chegaram outras mais novas, não porque foi encerrada. Concluir que
+        fechou esconde do site vaga publicada hoje.
+        """
+        self._coleta("c1", [_vaga(fonte="gupy"), _vaga(link="https://x/2", fonte="gupy")],
+                     fonte="gupy", nome="Gupy", completa=False)
+        self._coleta("c2", [_vaga(fonte="gupy")], fonte="gupy", nome="Gupy",
+                     completa=False)
+
+        total, vagas = db.buscar(self.con, {})
+        self.assertEqual(total, 2, "fonte com janela não esconde nada")
+        self.assertTrue(all(v["no_ar"] for v in vagas))
 
     def test_vaga_que_sumiu_fica_listada_mas_marcada(self):
         self._coleta("c1", [_vaga(), _vaga(link="https://x/2")])
@@ -202,9 +222,10 @@ class NoAr(unittest.TestCase):
         Se a InHire falhar numa rodada, as 8.900 vagas dela não podem sumir do
         site em bloco — seria quase metade do catálogo apagada por um blip.
         """
-        self._coleta("c1", [_vaga(fonte="inhire")], fonte="inhire", nome="InHire")
+        self._coleta("c1", [_vaga()], fonte="inhire", nome="InHire")
         # A Gupy coleta com sucesso mais tarde; a InHire falha (ultimo_ok fica em c1).
-        self._coleta("c2", [_vaga(link="https://x/g")])
+        self._coleta("c2", [_vaga(link="https://x/g")], fonte="gupy", nome="Gupy",
+                     completa=False)
         db.anotar_fonte(self.con, "inhire", "InHire", ultima_coleta="c2",
                         vagas=0, erro="ConnectionError")
 
@@ -234,6 +255,38 @@ class NoAr(unittest.TestCase):
         a comparação com NULL marcaria tudo como fora do ar."""
         db.salvar(self.con, [_vaga()], "c1")
         self.assertEqual(db.buscar(self.con, {})[0], 1)
+
+
+class CompatibilidadeDeVersao(unittest.TestCase):
+    """Guarda contra escrever código que só roda na máquina de desenvolvimento.
+
+    O piso é Python 3.9 (`zoneinfo` e `Path.is_relative_to`), que é o que
+    Ubuntu 22.04 e Oracle Linux 9 entregam. Quem desenvolve costuma estar num
+    3.12, onde o PEP 701 liberou barra invertida e aspas repetidas dentro das
+    expressões de f-string — construções que na VPS são SyntaxError, e o site
+    simplesmente não sobe. Já aconteceu uma vez, no menu do cabeçalho.
+    """
+
+    # f-string de uma linha; o que estiver entre chaves é a expressão.
+    LITERAL = re.compile(
+        r'''(?<![A-Za-z0-9_])[fF][rR]?(?P<q>"""|\'\'\'|"|\')(?P<corpo>.*?)(?<!\\)(?P=q)''')
+
+    def test_nada_de_f_string_exclusiva_do_312(self):
+        raiz = Path(__file__).resolve().parent.parent
+        problemas = []
+        for arquivo in sorted(raiz.rglob("*.py")):
+            if "__pycache__" in str(arquivo):
+                continue
+            for n, linha in enumerate(arquivo.read_text(encoding="utf-8").splitlines(), 1):
+                for casou in self.LITERAL.finditer(linha):
+                    corpo, aspa = casou.group("corpo"), casou.group("q")
+                    expr = "".join(re.findall(r"\{([^{}]*)\}", corpo))
+                    onde = f"{arquivo.relative_to(raiz)}:{n}"
+                    if "\\" in expr:
+                        problemas.append(f"{onde} barra invertida na expressão")
+                    if len(aspa) == 1 and aspa in expr:
+                        problemas.append(f"{onde} aspas {aspa} iguais ao delimitador")
+        self.assertEqual(problemas, [], "\n".join(problemas))
 
 
 class IntervaloPorFonte(unittest.TestCase):
