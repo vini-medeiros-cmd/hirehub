@@ -135,29 +135,51 @@ img { max-width: 100%; height: auto; }
 .contador strong { font-family: var(--titulo); font-size: 1.15rem; }
 .atualizacao { margin: 0; font-size: .85rem; color: var(--suave); }
 
-.grade { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
-@media (max-width: 760px) { .grade { grid-template-columns: 1fr; } }
+/* Três por linha no desktop. O card foi compactado para caber em ~349px sem
+   os badges quebrarem em duas linhas — o que estragava o alinhamento da grade
+   em quase um terço deles. Dois por linha em telas médias, um no celular. */
+.grade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+@media (max-width: 1080px) { .grade { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; } }
+/* minmax(0, 1fr), nunca 1fr puro: o mínimo de `1fr` é `auto`, então o nome de
+   empresa com `nowrap` empurrava a coluna para 497px num celular de 375 e o
+   site inteiro ganhava rolagem horizontal. */
+@media (max-width: 760px) { .grade { grid-template-columns: minmax(0, 1fr); } }
 
 .cartao {
   position: relative; display: flex; flex-direction: column;
-  border: 1px solid var(--borda); border-radius: var(--r); padding: 20px; background: #fff;
+  border: 1px solid var(--borda); border-radius: var(--r); padding: 16px; background: #fff;
 }
 .cartao:hover { border-color: #c9c9c9; }
-.cartao h3 { margin-bottom: 6px; padding-right: 68px; }
+/* A reserva à direita é o espaço do selo. "NOVA" mede 57px; "SAIU DO AR", 92 —
+   por isso a segunda regra, em vez de uma reserva única no pior caso. */
+.cartao h3 { font-size: 1rem; margin-bottom: 5px; padding-right: 66px; }
+.cartao.fora h3 { padding-right: 102px; }
 .cartao h3 a { color: var(--preto); }
 .cartao h3 a:hover { color: var(--azul); text-decoration: none; }
-.empresa { color: var(--suave); margin: 0 0 12px; font-size: .95rem; }
+.empresa {
+  color: var(--suave); margin: 0 0 10px; font-size: .88rem;
+  /* Nome de empresa longo não pode empurrar a largura do card nem virar três
+     linhas: uma linha, com reticências. O nome inteiro está na página da vaga. */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
-.atributos { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.atributos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .atributos span {
-  font-size: .78rem; padding: 3px 9px; border-radius: 12px;
+  font-size: .72rem; padding: 2px 8px; border-radius: 12px;
   background: var(--fundo-alt); color: var(--suave); border: 1px solid var(--borda);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
 .atributos .modalidade { color: var(--azul); border-color: rgba(10,102,194,.3); background: rgba(10,102,194,.06); }
 .atributos .salario { color: var(--verde-escuro); border-color: rgba(29,185,84,.35); background: rgba(29,185,84,.08); font-weight: 600; }
 
-.rodape-cartao { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; padding-top: 14px; border-top: 1px solid var(--borda); }
-.publicada { font-size: .82rem; color: var(--suave); }
+.rodape-cartao { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--borda); }
+/* A data cede espaço antes do botão: encurtar "Publicada há 4 horas" é menos
+   grave do que espremer ou quebrar o CTA, que é a ação da página. */
+.publicada {
+  font-size: .78rem; color: var(--suave); min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cartao .cta { flex: none; font-size: .84rem; padding: 9px 14px; }
 
 /* min-height 44px é o alvo de toque mínimo: no celular este botão é a ação
    principal da página inteira, e ele estava saindo com 43px. */

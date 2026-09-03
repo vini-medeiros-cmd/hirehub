@@ -80,6 +80,23 @@ def modalidade(valor):
 PAISES = {"BR": "Brasil", "PT": "Portugal", "US": "Estados Unidos",
           "AR": "Argentina", "MX": "México", "CL": "Chile", "CO": "Colômbia"}
 
+# A Gupy manda o estado por extenso ("Minas Gerais"); as outras três mandam a
+# sigla. Uniformizar na sigla resolve duas coisas de uma vez: o dado deixa de
+# depender da fonte, e o badge do card encolhe de "Belo Horizonte, Minas
+# Gerais" para "Belo Horizonte, MG" — que é o que faz caber três cards por
+# linha sem quebrar em duas linhas.
+UFS = {
+    "acre": "AC", "alagoas": "AL", "amapa": "AP", "amazonas": "AM",
+    "bahia": "BA", "ceara": "CE", "distrito federal": "DF",
+    "espirito santo": "ES", "goias": "GO", "maranhao": "MA",
+    "mato grosso": "MT", "mato grosso do sul": "MS", "minas gerais": "MG",
+    "para": "PA", "paraiba": "PB", "parana": "PR", "pernambuco": "PE",
+    "piaui": "PI", "rio de janeiro": "RJ", "rio grande do norte": "RN",
+    "rio grande do sul": "RS", "rondonia": "RO", "roraima": "RR",
+    "santa catarina": "SC", "sao paulo": "SP", "sergipe": "SE",
+    "tocantins": "TO",
+}
+
 
 def local(*partes):
     """Junta pedaços de localização num texto só, em ordem de especificidade.
@@ -106,6 +123,16 @@ def local(*partes):
         if anterior is None or (anterior == sem_acento(anterior) != pedaco):
             unicos[chave] = pedaco
     unicos = list(unicos.values())
+
+    # Estado por extenso vira sigla — mas só quando não é a única informação.
+    # Uma vaga que só diz "Bahia" precisa continuar dizendo "Bahia": "BA"
+    # sozinho num card, sem cidade antes, lê-se como abreviação solta.
+    if len(unicos) > 1:
+        unicos = [UFS.get(sem_acento(p).lower(), p) if i else p
+                  for i, p in enumerate(unicos)]
+        # A troca pode ter criado repetição: "Rio de Janeiro, Rio de Janeiro"
+        # vira "Rio de Janeiro, RJ", mas "RJ, Rio de Janeiro" viraria "RJ, RJ".
+        unicos = list(dict.fromkeys(unicos))
     # "Brasil" só informa quando é a única coisa que se sabe.
     if len(unicos) > 1 and sem_acento(unicos[-1]).lower() in ("brasil", "brazil"):
         unicos.pop()

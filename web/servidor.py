@@ -27,7 +27,12 @@ from web import paginas  # noqa: E402
 
 ROTA_VAGA = re.compile(r"^/vaga/([0-9a-f]{12})(?:/[^/]*)?/?$")
 CACHE_ESTATICO = "public, max-age=86400"
-CACHE_PAGINA = "public, max-age=300"
+# 60s, não 300. O cabeçalho estampa a hora atual e os cards dizem "publicada há
+# X min" — são justamente os elementos que provam que o portal está vivo, e
+# cinco minutos de cache os deixavam velhos. Um minuto ainda absorve rajada de
+# tráfego sem transformar o relógio em enfeite. Também encurta a propagação de
+# um deploy, já que é o HTML que carrega o ?v= dos estáticos.
+CACHE_PAGINA = "public, max-age=60"
 
 
 class Handler(BaseHTTPRequestHandler):

@@ -266,17 +266,22 @@ def _meta_vaga(vaga, fontes_por_id):
 
 def cartao(vaga, fontes_por_id):
     empresa = e(vaga.get("empresa") or "Empresa não informada")
+    # A classe marca o card para o CSS reservar mais espaço no título: o selo
+    # "SAIU DO AR" mede 92px contra os 57px do "NOVA", e a reserva única teria
+    # de servir ao pior caso — encurtando o título dos outros 99% dos cards
+    # para acomodar um selo que quase nunca aparece.
+    no_ar = vaga.get("no_ar", 1)
     return f"""
-<article class="cartao">
+<article class="cartao{'' if no_ar else ' fora'}">
   {_selo(vaga)}
   <h3><a href="/vaga/{e(vaga['id'])}/{texto.slug(vaga['titulo'])}">{e(vaga['titulo'])}</a></h3>
   <p class="empresa">{empresa}</p>
   <div class="atributos">{_meta_vaga(vaga, fontes_por_id)}</div>
   <div class="rodape-cartao">
     <span class="publicada">{e(ha_quanto(vaga.get('publicada_em')))}</span>
-    <a class="cta{'' if vaga.get('no_ar', 1) else ' apagado'}"
+    <a class="cta{'' if no_ar else ' apagado'}"
        href="{e(vaga['link'])}" target="_blank" rel="noopener nofollow">
-      {'Candidatar-se' if vaga.get('no_ar', 1) else 'Ver na origem'}</a>
+      {'Candidatar-se' if no_ar else 'Ver na origem'}</a>
   </div>
 </article>"""
 
