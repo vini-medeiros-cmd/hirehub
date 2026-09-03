@@ -168,6 +168,28 @@ class Conectores(unittest.TestCase):
         )
 
 
+class InfoJobsPagina(unittest.TestCase):
+    """Raspagem é parsing de HTML de terceiro — o lugar mais fácil de errar."""
+
+    def test_descricao_nao_traz_resto_da_tag_de_abertura(self):
+        from hirehub.fontes import infojobs
+        from hirehub import net
+
+        html = ('<html><body><div class="js_vacancyDataPanels js_applyVacancyHidden">'
+                '<p>Vendedor no centro.</p><p>Salário a combinar.</p></div></body></html>')
+        original = net.html_de
+        net.html_de = lambda *a, **k: html
+        try:
+            saida = infojobs.InfoJobs.detalhar({"link": "https://x"})["descricao"]
+        finally:
+            net.html_de = original
+
+        self.assertFalse(saida.startswith("js_"), saida[:60])
+        self.assertNotIn("js_applyVacancyHidden", saida)
+        self.assertIn("Vendedor no centro.", saida)
+        self.assertIn("Salário a combinar.", saida)
+
+
 class Paginas(unittest.TestCase):
     """Renderiza cada página com dados reais do banco.
 

@@ -74,10 +74,17 @@ class InfoJobs(Fonte):
         pagina = net.html_de(vaga["link"])
         if not pagina:
             return None
-        inicio = pagina.find(_PAINEL)
-        if inicio < 0:
+        marca = pagina.find(_PAINEL)
+        if marca < 0:
             return {"descricao": ""}  # página existe, mas sem o painel esperado
-        return {"descricao": _limpar(pagina[inicio:inicio + 12000])}
+        # A marca cai DENTRO do atributo class, no meio da tag de abertura.
+        # Cortar ali deixava o resto do atributo (`s js_applyVacancyHidden">`)
+        # como primeira linha da descrição, porque não sobra um '<' para a
+        # limpeza de tags reconhecer. Avançar até o fim da tag resolve.
+        inicio = pagina.find(">", marca)
+        if inicio < 0:
+            return {"descricao": ""}
+        return {"descricao": _limpar(pagina[inicio + 1:inicio + 12001])}
 
 
 def _listar(cidade, uf, remoto, pagina):

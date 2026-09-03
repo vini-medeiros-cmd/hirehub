@@ -80,6 +80,12 @@ def _coletar_fonte(con, fonte, cfg, carimbo):
         return 0
 
 
+# Detalhes buscados entre uma gravação e a próxima. Um backfill de milhares de
+# vagas leva dezenas de minutos, e gravar só no fim significaria perder tudo se
+# o processo morresse no meio. Também é o que dá progresso visível no log.
+LOTE_DETALHES = 250
+
+
 def _enriquecer(con, fonte, cfg):
     """Completa as vagas cuja listagem não trouxe descrição.
 
@@ -92,10 +98,16 @@ def _enriquecer(con, fonte, cfg):
     pendentes = db.pendentes_detalhe(con, fonte.id, cfg["detalhes_por_execucao"])
     if not pendentes:
         return 0
+
     log(f"  {fonte.nome}: buscando detalhe de {len(pendentes)} vagas")
-    resultados = net.em_paralelo(
-        lambda v: (v["id"], fonte.detalhar(v)), pendentes, cfg["threads"])
-    gravados = db.gravar_detalhes(con, [r for r in resultados if r])
+    gravados = 0
+    for inicio in range(0, len(pendentes), LOTE_DETALHES):
+        lote = pendentes[inicio:inicio + LOTE_DETALHES]
+        resultados = net.em_paralelo(
+            lambda v: (v["id"], fonte.detalhar(v)), lote, cfg["threads"])
+        gravados += db.gravar_detalhes(con, [r for r in resultados if r])
+        if len(pendentes) > LOTE_DETALHES:
+            log(f"    {gravados}/{len(pendentes)}")
     log(f"  {fonte.nome}: {gravados} detalhes gravados")
     return gravados
 
