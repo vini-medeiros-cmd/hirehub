@@ -19,10 +19,14 @@ ESTATICOS = RAIZ / "web" / "static"
 SITE = {
     "nome": "HireHub",
     "slogan": "O hub das oportunidades, seu próximo emprego começa aqui.",
+    # AINDA PROVISÓRIO: é daqui que saem as URLs canônicas, o sitemap e o
+    # robots.txt. Aponte HIREHUB_URL para o domínio real antes de publicar, ou
+    # os buscadores vão indexar um endereço que não existe.
     "url": os.environ.get("HIREHUB_URL", "https://hirehub.com.br"),
-    "email": "contato@hirehub.com.br",
-    "linkedin": "https://www.linkedin.com/in/vinicius-medeiros",
-    "github": "https://github.com/viniciusmedeiros",
+    "email": "viniciusrangelm@gmail.com",
+    "linkedin": "https://www.linkedin.com/in/viniciusrmedeiros/",
+    "github": "https://github.com/vini-medeiros-cmd",
+    # Vazio some do rodapé e da página de contato, em vez de virar link morto.
     "instagram": "",
 }
 
