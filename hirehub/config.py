@@ -39,11 +39,19 @@ PADROES = {
     "solides_paginas": 150,
     # Páginas por cidade/modalidade no InfoJobs (20 vagas cada).
     "infojobs_paginas_por_cidade": 3,
+    # Cidades varridas no InfoJobs, como pares [cidade-slug, uf]. Vazio usa a
+    # lista padrão do conector. O InfoJobs não tem busca nacional — cada URL cai
+    # numa cidade por geolocalização —, então a cobertura É esta lista, e ela
+    # fica na configuração para crescer sem mexer no código.
+    "infojobs_cidades": [],
     # Requisições de detalhe por fonte, por execução. Segura o tempo de cada
     # rodada; o cache converge ao longo das execuções seguintes.
     "detalhes_por_execucao": 400,
-    # Vaga que sumiu da origem continua listada por este tanto de dias.
-    "esquecer_apos_dias": 60,
+    # Vaga que sumiu da origem continua na base por este tanto de dias, marcada
+    # como "saiu do ar". O prazo é longo de propósito: a base vira um arquivo
+    # histórico que as próprias plataformas não oferecem — a Gupy, por exemplo,
+    # só deixa alcançar as 10.000 vagas mais recentes pela API dela.
+    "esquecer_apos_dias": 120,
     # A rede é o gargalo, não a CPU. Subir muito só irrita as APIs de origem.
     "threads": 6,
     # Horas entre coletas. Usado pelo agendador e pelo aviso de "próxima

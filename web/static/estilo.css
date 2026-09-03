@@ -178,7 +178,29 @@ img { max-width: 100%; height: auto; }
   font-size: .68rem; font-weight: 700; letter-spacing: .09em;
   padding: 3px 10px; border-radius: 999px;
 }
-.detalhe .selo-nova { position: static; display: inline-block; margin-bottom: 12px; }
+/* "Saiu do ar" é cinza, não vermelho: a vaga não é um erro, só não está mais
+   aberta. Vermelho gritaria mais alto que o próprio conteúdo do card. */
+.selo-fora {
+  position: absolute; top: 16px; right: 16px;
+  background: var(--suave); color: #fff; font-family: var(--titulo);
+  font-size: .68rem; font-weight: 700; letter-spacing: .09em;
+  padding: 3px 10px; border-radius: 999px;
+}
+.detalhe .selo-nova, .detalhe .selo-fora { position: static; display: inline-block; margin-bottom: 12px; }
+
+/* CTA de vaga fechada perde o verde: verde é ação e conversão, e aqui não há
+   conversão possível. O link continua clicável — só não promete o que não pode. */
+.cta.apagado { background: var(--suave); }
+.cta.apagado:hover { background: var(--preto); }
+
+.alerta-fora {
+  border-left: 3px solid var(--suave); background: var(--fundo-alt);
+  padding: 14px 16px; margin: 0 0 20px; font-size: .93rem; color: var(--texto);
+}
+
+.filtro-caixa { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; }
+.filtro-caixa label { font-size: .9rem; color: var(--suave); cursor: pointer; }
+.filtro-caixa input { width: 17px; height: 17px; accent-color: var(--azul); cursor: pointer; }
 
 .vazio { color: var(--suave); padding: 40px 0; grid-column: 1 / -1; }
 

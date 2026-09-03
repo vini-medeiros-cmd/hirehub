@@ -223,8 +223,28 @@ def status_fontes(con):
     return [dict(l) for l in linhas]
 
 
+# "No ar" = a vaga foi vista na última coleta BEM-SUCEDIDA DA PRÓPRIA FONTE.
+#
+# Comparar com a última coleta global seria errado: se a InHire falhasse numa
+# rodada, as 8.900 vagas dela ficariam com `coleta` mais antigo que o carimbo
+# global e sumiriam do site em bloco — 45% do catálogo apagado por um blip de
+# rede. Ancorando em `fontes.ultimo_ok`, uma fonte que falhou simplesmente não
+# move o próprio marco, e as vagas dela seguem no ar até a próxima coleta que
+# realmente der certo.
+#
+# COALESCE cobre a fonte que ainda não tem linha em `fontes` (base recém-criada):
+# sem ele, a comparação com NULL derrubaria tudo para "fora do ar".
+NO_AR = ("vagas.coleta >= COALESCE("
+         "(SELECT ultimo_ok FROM fontes WHERE fontes.id = vagas.fonte), vagas.coleta)")
+
+
 def _filtros(criterios):
     onde, valores = ["1=1"], []
+
+    # Ligado por padrão: quem chega ao site quer vaga aberta. Quem quiser o
+    # histórico marca a opção, e aí o card avisa quais saíram do ar.
+    if not criterios.get("incluir_fora_do_ar"):
+        onde.append(NO_AR)
 
     termo = texto.chave_busca(criterios.get("q"))
     if termo:
@@ -264,7 +284,7 @@ def buscar(con, criterios, pagina=0, por_pagina=POR_PAGINA):
         f"SELECT COUNT(*) FROM vagas WHERE {filtro}", valores).fetchone()[0]
     linhas = con.execute(
         f"""SELECT id, link, titulo, empresa, fonte, local, modalidade, salario,
-                   publicada_em, vista_em
+                   publicada_em, vista_em, {NO_AR} AS no_ar
             FROM vagas WHERE {filtro}
             -- Sem data vai para o fim: não dá para ordenar pelo critério que o
             -- usuário escolheu se justamente esse dado não existe.
@@ -276,34 +296,75 @@ def buscar(con, criterios, pagina=0, por_pagina=POR_PAGINA):
 
 
 def por_id(con, id_vaga):
-    linha = con.execute("SELECT * FROM vagas WHERE id = ?", (id_vaga,)).fetchone()
+    """Busca por id ignora o filtro de "no ar" de propósito.
+
+    Quem chegou aqui tem o link na mão — veio de um compartilhamento, de um
+    buscador ou do próprio histórico. Devolver 404 porque o anúncio saiu do ar
+    esconde a informação de quem foi atrás dela; a página abre e avisa.
+    """
+    linha = con.execute(
+        f"SELECT *, {NO_AR} AS no_ar FROM vagas WHERE id = ?", (id_vaga,)).fetchone()
     return dict(linha) if linha else None
 
 
 def relacionadas(con, vaga, limite=4):
-    """Outras vagas com título parecido, para a página de detalhes não ser um beco."""
+    """Outras vagas com título parecido, para a página de detalhes não ser um beco.
+
+    Aqui o filtro de "no ar" vale: sugerir uma vaga fechada a quem está olhando
+    outra não ajuda ninguém.
+    """
     primeira = (vaga.get("busca_titulo") or "").split()
     if not primeira:
         return []
     return [dict(l) for l in con.execute(
-        """SELECT id, link, titulo, empresa, local, fonte, modalidade, salario,
-                  publicada_em
-           FROM vagas WHERE busca_titulo LIKE ? AND id != ?
-           ORDER BY publicada_em IS NULL, publicada_em DESC LIMIT ?""",
+        f"""SELECT id, link, titulo, empresa, local, fonte, modalidade, salario,
+                   publicada_em, 1 AS no_ar
+            FROM vagas WHERE busca_titulo LIKE ? AND id != ? AND {NO_AR}
+            ORDER BY publicada_em IS NULL, publicada_em DESC LIMIT ?""",
         (f"%{primeira[0]}%", vaga["id"], limite),
     ).fetchall()]
 
 
+VAZIO = {"total": 0, "novas": 0, "empresas": 0, "fora_do_ar": 0}
+
+
 def contagens(con):
-    """Números do rodapé e da home, direto do que existe na base."""
+    """Números da home, numa varredura só.
+
+    Contam apenas o que está no ar: anunciar "19.870 vagas" e entregar uma
+    listagem com menos seria mentir no primeiro número que o visitante lê.
+
+    As quatro contas cabem num SELECT porque a base inteira precisa ser
+    percorrida de qualquer jeito — o predicado de "no ar" não é indexável. Em
+    consultas separadas eram quatro varreduras de ~60ms cada; numa só, 86ms.
+    """
+    corte = (datetime.now(timezone.utc)
+             - timedelta(hours=JANELA_NOVA_HORAS)).isoformat()
     try:
-        total = con.execute("SELECT COUNT(*) FROM vagas").fetchone()[0]
-        corte = (datetime.now(timezone.utc)
-                 - timedelta(hours=JANELA_NOVA_HORAS)).isoformat()
-        novas = con.execute(
-            "SELECT COUNT(*) FROM vagas WHERE publicada_em >= ?", (corte,)).fetchone()[0]
-        empresas = con.execute(
-            "SELECT COUNT(DISTINCT empresa) FROM vagas WHERE empresa != ''").fetchone()[0]
+        total, novas, empresas, fora = con.execute(
+            f"""SELECT SUM({NO_AR}),
+                       SUM(({NO_AR}) AND publicada_em >= ?),
+                       COUNT(DISTINCT CASE WHEN ({NO_AR}) AND empresa != ''
+                                           THEN empresa END),
+                       SUM(NOT ({NO_AR}))
+                FROM vagas""", (corte,)).fetchone()
     except sqlite3.OperationalError:
-        return {"total": 0, "novas": 0, "empresas": 0}
-    return {"total": total, "novas": novas, "empresas": empresas}
+        return dict(VAZIO)
+    return {"total": total or 0, "novas": novas or 0,
+            "empresas": empresas or 0, "fora_do_ar": fora or 0}
+
+
+def contagens_rapidas(con):
+    """O mesmo, mas lido do que a última coleta deixou anotado.
+
+    O rodapé mostra o total em TODAS as páginas. Varrer 20 mil linhas para
+    imprimir um número no rodapé de uma página institucional é desperdício:
+    esse total só muda quando uma coleta termina, que é exatamente quando ele é
+    gravado. A home continua usando contagens(), porque ali os números são o
+    conteúdo, não um detalhe do rodapé.
+    """
+    meta = ler_meta(con)
+    if "vagasNoAr" not in meta:
+        return contagens(con)
+    return {**VAZIO, "total": int(meta.get("vagasNoAr") or 0),
+            "fora_do_ar": int(meta.get("vagasForaDoAr") or 0)}

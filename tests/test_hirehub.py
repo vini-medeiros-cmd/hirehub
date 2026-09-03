@@ -168,6 +168,74 @@ class Conectores(unittest.TestCase):
         )
 
 
+class NoAr(unittest.TestCase):
+    """A regra do "saiu do ar": vaga some da origem, não some do site."""
+
+    def setUp(self):
+        config.BANCO.unlink(missing_ok=True)
+        self.con = db.abrir()
+
+    def tearDown(self):
+        self.con.close()
+
+    def _coleta(self, carimbo, vagas, fonte="gupy", nome="Gupy"):
+        db.salvar(self.con, vagas, carimbo)
+        db.anotar_fonte(self.con, fonte, nome, ultima_coleta=carimbo,
+                        ultimo_ok=carimbo, vagas=len(vagas), erro=None)
+
+    def test_vaga_que_sumiu_fica_listada_mas_marcada(self):
+        self._coleta("c1", [_vaga(), _vaga(link="https://x/2")])
+        self._coleta("c2", [_vaga()])  # a segunda não veio mais
+
+        total, _ = db.buscar(self.con, {})
+        self.assertEqual(total, 1, "por padrão só as no ar")
+
+        total, vagas = db.buscar(self.con, {"incluir_fora_do_ar": True})
+        self.assertEqual(total, 2)
+        self.assertEqual({v["id"]: bool(v["no_ar"]) for v in vagas},
+                         {texto.id_da_vaga("https://exemplo.com/vaga/1"): True,
+                          texto.id_da_vaga("https://x/2"): False})
+
+    def test_fonte_que_falha_nao_derruba_as_vagas_dela(self):
+        """O ponto de ancorar em fontes.ultimo_ok e não na coleta global.
+
+        Se a InHire falhar numa rodada, as 8.900 vagas dela não podem sumir do
+        site em bloco — seria quase metade do catálogo apagada por um blip.
+        """
+        self._coleta("c1", [_vaga(fonte="inhire")], fonte="inhire", nome="InHire")
+        # A Gupy coleta com sucesso mais tarde; a InHire falha (ultimo_ok fica em c1).
+        self._coleta("c2", [_vaga(link="https://x/g")])
+        db.anotar_fonte(self.con, "inhire", "InHire", ultima_coleta="c2",
+                        vagas=0, erro="ConnectionError")
+
+        total, vagas = db.buscar(self.con, {})
+        self.assertEqual(total, 2)
+        self.assertTrue(all(v["no_ar"] for v in vagas))
+
+    def test_pagina_da_vaga_abre_mesmo_fora_do_ar(self):
+        """Quem chegou por link antigo merece a página com aviso, não um 404."""
+        self._coleta("c1", [_vaga()])
+        self._coleta("c2", [])
+        vaga = db.por_id(self.con, texto.id_da_vaga(_vaga()["link"]))
+        self.assertIsNotNone(vaga)
+        self.assertFalse(vaga["no_ar"])
+
+    def test_contagens_e_relacionadas_ignoram_as_fora_do_ar(self):
+        self._coleta("c1", [_vaga(), _vaga(link="https://x/2")])
+        self._coleta("c2", [_vaga()])
+        self.assertEqual(db.contagens(self.con)["total"], 1)
+        self.assertEqual(db.contagens(self.con)["fora_do_ar"], 1)
+
+        vaga = db.por_id(self.con, texto.id_da_vaga(_vaga()["link"]))
+        self.assertEqual(db.relacionadas(self.con, vaga), [])
+
+    def test_base_sem_tabela_de_fontes_nao_esconde_nada(self):
+        """Base recém-criada, antes da primeira coleta terminar: sem o COALESCE
+        a comparação com NULL marcaria tudo como fora do ar."""
+        db.salvar(self.con, [_vaga()], "c1")
+        self.assertEqual(db.buscar(self.con, {})[0], 1)
+
+
 class InfoJobsPagina(unittest.TestCase):
     """Raspagem é parsing de HTML de terceiro — o lugar mais fácil de errar."""
 

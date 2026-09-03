@@ -11,7 +11,10 @@ ver deploy/. Sozinho, aguenta o desenvolvimento e um tráfego modesto.
 """
 import mimetypes
 import re
+import subprocess
 import sys
+import threading
+import time
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -105,6 +108,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _pagina(self, con, ctx, caminho, params):
         if caminho == "/":
+            # Só a home paga a varredura: ali os números SÃO o conteúdo.
+            ctx["contagens"] = db.contagens(con)
             _, recentes = db.buscar(con, {}, pagina=0, por_pagina=6)
             return paginas.home(ctx, recentes, ctx["status_fontes"]),
 
@@ -115,6 +120,7 @@ class Handler(BaseHTTPRequestHandler):
                 "modalidade": _texto(params, "modalidade"),
                 "fonte": _texto(params, "fonte"),
                 "dias": _inteiro(params, "dias"),
+                "incluir_fora_do_ar": params.get("fora", [""])[0] == "1",
             }
             pagina = max(0, _inteiro(params, "pagina"))
             total, vagas = db.buscar(con, criterios, pagina)
@@ -148,7 +154,7 @@ class Handler(BaseHTTPRequestHandler):
             "rota": rota,
             "agora": datetime.now(paginas.FUSO),
             "meta": db.ler_meta(con),
-            "contagens": db.contagens(con),
+            "contagens": db.contagens_rapidas(con),
             "status_fontes": db.status_fontes(con),
             "fontes_registradas": registradas,
             "fontes_por_id": {f.id: f.nome for f in registradas},
@@ -199,7 +205,38 @@ def _inteiro(params, chave, padrao=0):
         return padrao
 
 
-def servir(host="0.0.0.0", porta=8080):
+def _agendador(intervalo_horas):
+    """Dispara a coleta a cada N horas, de dentro do próprio servidor.
+
+    Só é usado quando o ambiente não tem systemd (é o timer em deploy/ que faz
+    isso em produção, e ele é melhor: sobrevive ao servidor cair, registra no
+    journal e tem Persistent=true). Este agendador existe para o caso oposto —
+    Termux, contêiner sem init, VPS sem systemd —, onde não há cron nem timer e
+    o servidor é o único processo permanentemente vivo.
+
+    A coleta roda como SUBPROCESSO, nunca dentro deste processo: se ela travar
+    ou estourar memória, o site continua respondendo.
+    """
+    coletor = str(Path(__file__).resolve().parent.parent / "bin" / "coletar.py")
+    # Espera antes da primeira execução: subir o site e disparar milhares de
+    # requisições ao mesmo tempo deixa tudo lento justo na hora em que alguém
+    # abriu a página para ver se o deploy deu certo.
+    time.sleep(300)
+    while True:
+        try:
+            processo = subprocess.Popen([sys.executable, coletor])
+            processo.wait()
+        except Exception as e:
+            print(f"[agendador] falha ao disparar a coleta: {e}", flush=True)
+        time.sleep(max(1, intervalo_horas) * 3600)
+
+
+def servir(host="0.0.0.0", porta=8080, agendar=False):
+    if agendar:
+        horas = int(config.carregar()["intervalo_horas"])
+        threading.Thread(target=_agendador, args=(horas,), daemon=True).start()
+        print(f"Agendador interno: coleta a cada {horas}h", flush=True)
+
     servidor = ThreadingHTTPServer((host, porta), Handler)
     servidor.daemon_threads = True
     print(f"HireHub no ar em http://{host}:{porta}", flush=True)

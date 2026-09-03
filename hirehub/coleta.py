@@ -146,14 +146,19 @@ def executar(apenas=None):
             intervaloHoras=cfg["intervalo_horas"],
         )
 
+        # Contado aqui, uma vez, para o rodapé do site não varrer a base a cada
+        # página só para imprimir um número. Ver db.contagens_rapidas().
+        contagens = db.contagens(con)
+        db.gravar_meta(con, vagasNoAr=contagens["total"],
+                       vagasForaDoAr=contagens["fora_do_ar"])
+
         no_banco = con.execute("SELECT COUNT(*) FROM vagas").fetchone()[0]
-        no_ar = con.execute(
-            "SELECT COUNT(*) FROM vagas WHERE coleta=?", (carimbo,)).fetchone()[0]
         con.execute("VACUUM")
         con.close()
 
         tamanho = config.BANCO.stat().st_size / 1048576
-        log(f"Base: {no_banco} vagas ({no_ar} no ar) · {total_novas} novas · "
+        log(f"Base: {no_banco} vagas ({contagens['total']} no ar, "
+            f"{contagens['fora_do_ar']} fora) · {total_novas} novas · "
             f"{removidas} removidas · {tamanho:.1f} MB · {time.time() - inicio:.0f}s")
         return True
     finally:

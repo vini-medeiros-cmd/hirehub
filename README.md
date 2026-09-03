@@ -25,6 +25,16 @@ python3 bin/coletar.py     # roda uma coleta (~2 a 10 min)
 python3 bin/servir.py      # sobe o site em http://localhost:8080
 ```
 
+Em ambiente **sem systemd** (Termux, contêiner sem init), o próprio servidor
+pode agendar a coleta — nenhum dos ambientes tem cron:
+
+```bash
+python3 bin/servir.py --agendar
+```
+
+Em produção prefira o `hirehub-coleta.timer`: ele sobrevive ao site cair,
+registra no journal e recupera a rodada perdida depois de um reboot.
+
 Para coletar de uma fonte só, útil ao mexer num conector:
 
 ```bash
@@ -89,11 +99,20 @@ crie `data/hirehub.config.json`:
   "gupy_termos": [],
   "solides_paginas": 150,
   "infojobs_paginas_por_cidade": 3,
+  "infojobs_cidades": [],
   "detalhes_por_execucao": 400,
-  "esquecer_apos_dias": 60,
+  "esquecer_apos_dias": 120,
   "threads": 6,
   "intervalo_horas": 6
 }
+```
+
+`infojobs_cidades` define a cobertura dessa fonte: o InfoJobs não tem busca
+nacional — cada URL cai numa cidade por geolocalização —, então a lista **é** o
+alcance. Vazio usa o padrão do conector (capitais e polos). Para acrescentar:
+
+```json
+{ "infojobs_cidades": [["sao-paulo", "sp"], ["macae", "rj"], ["natal", "rn"]] }
 ```
 
 `detalhes_por_execucao` merece atenção. As descrições da InHire e do InfoJobs
@@ -148,12 +167,34 @@ hirehub/
 └── data/                banco, cache e a lista de empresas da InHire
 ```
 
+### Regras de negócio
+
+Valem para as quatro fontes, e são o que o sistema garante independentemente de
+qual plataforma quebrar:
+
+1. **Nunca há filtro de cargo na coleta.** Puxa tudo que a API permite; a
+   peneira acontece depois, em SQL, na hora da busca — não no navegador.
+2. **Nada é apagado por ficar velho**, só depois de `esquecer_apos_dias`
+   (padrão: 120). A base vira um arquivo histórico que as plataformas não
+   oferecem: a Gupy, por exemplo, só deixa alcançar as 10.000 mais recentes.
+3. **Vaga que sumiu não some na hora — sai do ar.** Continua listada e marcada,
+   para não desaparecer antes de alguém ter visto. O filtro "só as no ar" vem
+   ligado; a página da vaga abre mesmo assim, com aviso antes do botão.
+4. **Só a Sólides publica salário.** Nas outras três o campo fica vazio.
+5. **A coleta é isolada do site.** Roda como serviço separado — se travar ou
+   estourar memória, o site continua respondendo.
+6. **Agendamento sem cron.** Nenhum dos ambientes tem cron; quem agenda é o
+   `hirehub-coleta.timer` do systemd (ou o `--agendar`, abaixo).
+7. **Link não confiável nunca aparece.** Vaga sem link clicável garantido é
+   descartada na coleta em vez de ser exibida quebrada — é o caso das vagas da
+   Sólides com id alfanumérico, vindas de integrações externas via ATS.
+8. **Uma fonte que falha não derruba as outras** nem esconde as vagas dela: o
+   marco de "no ar" é por fonte, então uma coleta ruim da InHire não apaga do
+   site as 8.900 vagas que ela já tinha trazido.
+
 ### Decisões que valem saber
 
-**A base acumula.** Cada coleta acrescenta; nada é substituído. Isso dá um
-histórico que as próprias APIs não devolvem — a Gupy, por exemplo, só deixa ver
-as 10.000 vagas mais recentes. Vagas que sumiram da origem são removidas depois
-de `esquecer_apos_dias` (padrão: 60).
+**A base acumula.** Cada coleta acrescenta; nada é substituído.
 
 **Uma fonte que falha não derruba as outras.** Cada conector roda no seu try, e
 o erro vai para a tabela `fontes`, que alimenta `/status`. Um scraping quebrado

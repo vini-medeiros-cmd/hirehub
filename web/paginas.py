@@ -213,7 +213,16 @@ def _campos_busca(criterios, compacto=False):
 
 
 def _selo(vaga):
-    return '<span class="selo-nova">NOVA</span>' if e_nova(vaga.get("publicada_em")) else ""
+    """Um selo por vaga, e "saiu do ar" ganha da novidade.
+
+    As duas condições podem coincidir (vaga publicada e removida no mesmo dia),
+    e nesse caso a informação que muda a decisão de quem lê é a segunda.
+    """
+    if not vaga.get("no_ar", 1):
+        return '<span class="selo-fora">SAIU DO AR</span>'
+    if e_nova(vaga.get("publicada_em")):
+        return '<span class="selo-nova">NOVA</span>'
+    return ""
 
 
 def _meta_vaga(vaga, fontes_por_id):
@@ -239,7 +248,9 @@ def cartao(vaga, fontes_por_id):
   <div class="atributos">{_meta_vaga(vaga, fontes_por_id)}</div>
   <div class="rodape-cartao">
     <span class="publicada">{e(ha_quanto(vaga.get('publicada_em')))}</span>
-    <a class="cta" href="{e(vaga['link'])}" target="_blank" rel="noopener nofollow">Candidatar-se</a>
+    <a class="cta{'' if vaga.get('no_ar', 1) else ' apagado'}"
+       href="{e(vaga['link'])}" target="_blank" rel="noopener nofollow">
+      {'Candidatar-se' if vaga.get('no_ar', 1) else 'Ver na origem'}</a>
   </div>
 </article>"""
 
@@ -302,6 +313,11 @@ def _filtros(criterios, fontes_disponiveis):
   {grupo("dias", "Data de publicação", DATAS, criterios.get("dias") or "")}
   {grupo("modalidade", "Modalidade", MODALIDADES, criterios.get("modalidade") or "")}
   {grupo("fonte", "Plataforma", plataformas, criterios.get("fonte") or "")}
+  <div class="filtro-caixa">
+    <input type="checkbox" id="f-fora" name="fora" value="1"
+           {"checked" if criterios.get("incluir_fora_do_ar") else ""}>
+    <label for="f-fora">Incluir vagas que saíram do ar</label>
+  </div>
   <button type="submit">Aplicar filtros</button>
   <a class="limpar" href="{url("/vagas", q=criterios.get("q"), local=criterios.get("local"))}">Limpar</a>
 </form>"""
@@ -370,7 +386,12 @@ def listagem(ctx, criterios, pagina, total, vagas, fontes):
     cartoes = "".join(cartao(v, ctx["fontes_por_id"]) for v in vagas) or """
       <p class="vazio">Nenhuma vaga encontrada com esses critérios.
       Tente uma palavra-chave mais ampla ou remova algum filtro.</p>"""
-    filtros_url = {k: v for k, v in criterios.items() if v}
+    # A paginação precisa carregar o estado dos filtros. `incluir_fora_do_ar` é
+    # booleano interno e vira `fora=1` na URL, que é o nome que o formulário usa.
+    filtros_url = {k: v for k, v in criterios.items()
+                   if v and k != "incluir_fora_do_ar"}
+    if criterios.get("incluir_fora_do_ar"):
+        filtros_url["fora"] = "1"
     titulo = "Vagas"
     if criterios.get("q"):
         titulo = f"Vagas de {criterios['q']}"
@@ -425,6 +446,20 @@ def detalhes(ctx, vaga, relacionadas):
         <div class="grade">{outras}</div>
       </section>""" if outras else ""
 
+    no_ar = vaga.get("no_ar", 1)
+    # A vaga abre mesmo fora do ar (ver db.por_id), mas o aviso vem ANTES do
+    # botão: quem chegou por um link antigo precisa saber disso antes de
+    # clicar, não depois de bater numa página de erro na plataforma de origem.
+    if no_ar:
+        alerta = ""
+        acao = f"Candidatar-se em {e(nome_fonte)}"
+    else:
+        alerta = """<p class="alerta-fora"><strong>Esta vaga saiu do ar.</strong>
+           Ela não apareceu na última coleta da plataforma de origem, o que
+           costuma significar que o anúncio foi encerrado. O link abaixo pode
+           não funcionar mais.</p>"""
+        acao = f"Ver na {e(nome_fonte)}"
+
     resumo = (vaga.get("descricao") or "")[:280] or \
         f"{vaga['titulo']} na {vaga.get('empresa') or 'empresa'}."
     return layout(ctx, vaga["titulo"], f"""
@@ -434,8 +469,9 @@ def detalhes(ctx, vaga, relacionadas):
   <h1>{e(vaga['titulo'])}</h1>
   <p class="empresa-grande">{e(vaga.get('empresa') or 'Empresa não informada')}</p>
   <ul class="ficha">{"".join(linhas)}</ul>
-  <a class="cta grande" href="{e(vaga['link'])}" target="_blank" rel="noopener nofollow">
-     Candidatar-se em {e(nome_fonte)}</a>
+  {alerta}
+  <a class="cta grande{'' if no_ar else ' apagado'}"
+     href="{e(vaga['link'])}" target="_blank" rel="noopener nofollow">{acao}</a>
   <p class="aviso-externo">A candidatura acontece no site da plataforma de
      origem. O HireHub não recebe currículos nem dados pessoais.</p>
   {corpo}

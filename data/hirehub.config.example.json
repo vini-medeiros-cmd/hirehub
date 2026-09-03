@@ -2,8 +2,9 @@
   "gupy_termos": [],
   "solides_paginas": 150,
   "infojobs_paginas_por_cidade": 3,
+  "infojobs_cidades": [],
   "detalhes_por_execucao": 400,
-  "esquecer_apos_dias": 60,
+  "esquecer_apos_dias": 120,
   "threads": 6,
   "intervalo_horas": 6
 }

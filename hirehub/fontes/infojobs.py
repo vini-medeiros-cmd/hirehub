@@ -18,7 +18,7 @@ from . import Fonte, registrar
 
 BASE = "https://www.infojobs.com.br"
 
-CIDADES = [
+CIDADES_PADRAO = [
     ("sao-paulo", "sp"), ("rio-janeiro", "rj"), ("belo-horizonte", "mg"),
     ("brasilia", "df"), ("curitiba", "pr"), ("porto-alegre", "rs"),
     ("salvador", "ba"), ("recife", "pe"), ("fortaleza", "ce"),
@@ -52,13 +52,14 @@ class InfoJobs(Fonte):
         paginas = int(cfg["infojobs_paginas_por_cidade"])
         if paginas <= 0:
             return []
+        cidades = [tuple(c) for c in cfg.get("infojobs_cidades") or CIDADES_PADRAO]
         tarefas = [
             (cidade, uf, remoto, p)
-            for cidade, uf in CIDADES
+            for cidade, uf in cidades
             for remoto in (False, True)
             for p in range(1, paginas + 1)
         ]
-        log(f"{paginas} páginas x {len(CIDADES)} cidades x 2 modalidades")
+        log(f"{paginas} páginas x {len(cidades)} cidades x 2 modalidades")
         lotes = net.em_paralelo(lambda t: _listar(*t), tarefas, cfg["threads"])
         vistos, vagas = set(), []
         for lote in lotes:
