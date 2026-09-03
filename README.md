@@ -108,6 +108,24 @@ de uma vez — vale a pena logo depois do primeiro `coletar.py` —, suba o núm
 `gupy_termos` abre uma janela ADICIONAL de 10.000 vagas por termo, para
 alcançar anúncios mais antigos de uma área específica.
 
+### Quanto demora
+
+Medido em 03/09/2026, com `threads: 8`, numa conexão doméstica:
+
+| Etapa | Tempo |
+|---|---|
+| Gupy (10.000 vagas) | 26 s |
+| InfoJobs (2 páginas × 12 cidades × 2 modalidades) | 6 s |
+| InHire (448 empresas) | 48 s |
+| Sólides (30 páginas, todas vazias) | 126 s |
+| Enriquecimento | ~12 detalhes/s |
+| **Coleta completa com 4.000 detalhes** | **~10 min** |
+
+Com o padrão de 400 detalhes por execução, uma rodada leva 3 a 4 minutos. O
+enriquecimento é gravado a cada 250 itens, então um processo interrompido perde
+no máximo um lote — o resto já está no banco e a execução seguinte continua de
+onde parou.
+
 ---
 
 ## Como está montado
