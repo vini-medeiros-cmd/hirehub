@@ -48,6 +48,10 @@ PADROES = {
     # "rio-de-janeiro"). 40 vagas por página.
     "vagas_paginas_por_cidade": 5,
     "vagas_cidades": [],
+    # Trampos.co: 10 vagas por página; o acervo acaba por volta da 24. O
+    # conector para sozinho na primeira página incompleta, então este número é
+    # só um teto de segurança.
+    "trampos_paginas": 30,
     # Requisições de detalhe por fonte, por execução. Segura o tempo de cada
     # rodada; o cache converge ao longo das execuções seguintes.
     "detalhes_por_execucao": 400,

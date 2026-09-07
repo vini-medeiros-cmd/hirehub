@@ -169,7 +169,7 @@ class Conectores(unittest.TestCase):
         """
         self.assertEqual(
             {f.id for f in fontes.todas()},
-            {"gupy", "inhire", "infojobs", "solides", "vagas"},
+            {"gupy", "inhire", "infojobs", "solides", "trampos", "vagas"},
         )
 
     def test_conector_grava_a_fonte_com_o_proprio_id(self):

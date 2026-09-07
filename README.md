@@ -64,6 +64,7 @@ escrita à mão.
 | **InHire** | completa (~8.900) | 1 requisição por vaga | exige `data/inhire-tenants.json`; não tem busca global |
 | **InfoJobs** | por cidade | 1 requisição por vaga | HTML raspado, sem API |
 | **Vagas.com.br** | por cidade | 1 requisição por vaga | listagem raspada; detalhe em JSON-LD |
+| **Trampos.co** | ~230 vagas | 1 requisição por vaga | API pública sem token; áreas criativas e digitais |
 | **Sólides** | estatística | vem na listagem | **hoje devolve zero** — ver abaixo |
 
 Só a **InHire** declara `cobertura_completa`. As demais entregam uma janela, e
@@ -94,6 +95,18 @@ incomodar a origem. Não suba esses números sem medir.
 
 Os tetos da fonte são limites, nunca permissões — se a configuração global for
 mais apertada, vale a global.
+
+### Trampos.co: pequena, mas a única com API aberta
+
+`https://trampos.co/api/oportunidades.json?page=N` devolve JSON paginado **sem
+token, sem cabeçalho especial e sem cadastro** — a documentação fala em "API
+para parceiros", mas o endereço responde aberto, e foi isso que decidiu a
+entrada dela, não a documentação.
+
+São ~230 vagas cobrindo três semanas, em design, produto, marketing e
+tecnologia. Entra por complementar o catálogo onde as generalistas são fracas,
+não por volume. A listagem já traz `published_at`, o que a Vagas.com.br e o
+InfoJobs só entregam com uma requisição por vaga.
 
 ### Plataformas avaliadas e descartadas
 

@@ -5,6 +5,7 @@
   "infojobs_cidades": [],
   "vagas_paginas_por_cidade": 5,
   "vagas_cidades": [],
+  "trampos_paginas": 30,
   "detalhes_por_execucao": 400,
   "esquecer_apos_dias": 120,
   "threads": 6,

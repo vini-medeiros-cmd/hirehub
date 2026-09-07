@@ -19,10 +19,9 @@ Medido em 04/09/2026: São Paulo tem 992 vagas alcançáveis, 40 por página, e 
 paginação vai até o fim sem repetir.
 """
 import html
-import json
 import re
 
-from .. import net, texto
+from .. import net, schemaorg, texto
 from . import Fonte, registrar
 
 BASE = "https://www.vagas.com.br"
@@ -43,7 +42,6 @@ _LINK = re.compile(r'href="(/vagas/v[^"]+)"')
 _TITULO = re.compile(r'class="link-detalhes-vaga"[^>]*title="([^"]*)"')
 _EMPRESA = re.compile(r'class="emprVaga"[^>]*>\s*([^<]+)')
 _LOCAL = re.compile(r'class="vaga-local"[^>]*>[\s\S]*?</i>\s*([^<]+)')
-_JSON_LD = re.compile(r'<script[^>]+application/ld\+json[^>]*>([\s\S]*?)</script>')
 
 
 @registrar
@@ -82,22 +80,11 @@ class Vagas(Fonte):
     @staticmethod
     def detalhar(vaga):
         pagina = net.html_de(vaga["link"])
-        if not pagina:
-            return None
-        anuncio = _json_ld_jobposting(pagina)
-        if not anuncio:
-            return {"descricao": ""}  # página existe, mas sem a marcação
-        endereco = (anuncio.get("jobLocation") or {}).get("address") or {}
-        # TELECOMMUTE é o vocabulário do schema.org para trabalho remoto.
-        remoto = str(anuncio.get("jobLocationType") or "").upper() == "TELECOMMUTE"
-        return {
-            "descricao": texto.texto_de_html(anuncio.get("description")),
-            "publicada_em": texto.data_iso(anuncio.get("datePosted")),
-            "local": texto.local(endereco.get("addressLocality"),
-                                 endereco.get("addressRegion")) or None,
-            "salario": _salario(anuncio.get("baseSalary")) or None,
-            "modalidade": "remote" if remoto else None,
-        }
+        if pagina is None:
+            return None  # não consegui buscar — tenta de novo depois
+        # Página veio, mas sem a marcação: é resposta legítima, e a descrição
+        # vazia marca a vaga como já enriquecida.
+        return schemaorg.vaga_de(pagina) or {"descricao": ""}
 
 
 def _listar(cidade, pagina):
@@ -134,36 +121,3 @@ def _listar(cidade, pagina):
 def _busca(padrao, bloco):
     casou = padrao.search(bloco)
     return html.unescape(casou.group(1)).strip() if casou else ""
-
-
-def _json_ld_jobposting(pagina):
-    """O bloco schema.org/JobPosting da página, se houver.
-
-    É marcação padronizada, publicada para os buscadores indexarem — bem mais
-    estável que classe de CSS. Vale a pena procurar em qualquer fonte nova
-    antes de partir para raspagem de HTML.
-    """
-    for bruto in _JSON_LD.findall(pagina):
-        try:
-            dados = json.loads(bruto)
-        except json.JSONDecodeError:
-            continue
-        for item in (dados if isinstance(dados, list) else [dados]):
-            if isinstance(item, dict) and item.get("@type") == "JobPosting":
-                return item
-    return None
-
-
-def _salario(base):
-    """MonetaryAmount do schema.org → texto curto, no formato das outras fontes."""
-    if not isinstance(base, dict):
-        return ""
-    valor = base.get("value")
-    if not isinstance(valor, dict):
-        return ""
-    ini, fim = valor.get("minValue"), valor.get("maxValue")
-    if not ini and not fim:
-        return ""
-    if ini and fim and ini != fim:
-        return f"R$ {ini:,.0f} a R$ {fim:,.0f}".replace(",", ".")
-    return f"R$ {(ini or fim):,.0f}".replace(",", ".")
