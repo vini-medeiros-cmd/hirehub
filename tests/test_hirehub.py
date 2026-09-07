@@ -160,13 +160,38 @@ class Conectores(unittest.TestCase):
             self.assertTrue(callable(fonte.coletar), fonte.id)
             self.assertIs(fontes.por_id(fonte.id), fonte)
 
-    def test_ids_conferem_com_o_que_os_conectores_gravam(self):
-        """Se um conector devolvesse `fonte` diferente do próprio id, o filtro
-        por plataforma pararia de achar as vagas dele — sem erro nenhum."""
+    def test_inventario_de_fontes(self):
+        """Lista explícita: acrescentar plataforma é decisão, não acidente.
+
+        Quebrar aqui ao adicionar um conector é o comportamento desejado —
+        obriga a atualizar o README e a conferir se a fonte declarou
+        `cobertura_completa` com consciência do que isso faz.
+        """
         self.assertEqual(
             {f.id for f in fontes.todas()},
-            {"gupy", "inhire", "infojobs", "solides"},
+            {"gupy", "inhire", "infojobs", "solides", "vagas"},
         )
+
+    def test_conector_grava_a_fonte_com_o_proprio_id(self):
+        """Se um conector escrevesse `"fonte": "outra-coisa"`, o filtro por
+        plataforma pararia de achar as vagas dele — e sem erro nenhum, porque
+        a coluna aceita qualquer texto. Confere no código, já que exercitar os
+        conectores de verdade exigiria rede."""
+        raiz = Path(__file__).resolve().parent.parent / "hirehub" / "fontes"
+        for fonte in fontes.todas():
+            fonte_py = raiz / f"{fonte.id}.py"
+            self.assertTrue(fonte_py.is_file(),
+                            f"{fonte.id}: esperado o módulo {fonte_py.name}")
+            gravados = set(re.findall(r'"fonte":\s*"([^"]+)"',
+                                      fonte_py.read_text(encoding="utf-8")))
+            self.assertEqual(gravados, {fonte.id},
+                             f"{fonte.id} grava {gravados or 'nada'}")
+
+    def test_cobertura_completa_e_declarada_conscientemente(self):
+        """Só fonte exaustiva pode marcar vaga como "saiu do ar". Hoje é uma
+        só; se virarem duas, que seja por decisão."""
+        exaustivas = {f.id for f in fontes.todas() if f.cobertura_completa}
+        self.assertEqual(exaustivas, {"inhire"})
 
 
 class NoAr(unittest.TestCase):
@@ -255,6 +280,73 @@ class NoAr(unittest.TestCase):
         a comparação com NULL marcaria tudo como fora do ar."""
         db.salvar(self.con, [_vaga()], "c1")
         self.assertEqual(db.buscar(self.con, {})[0], 1)
+
+
+class Enriquecimento(unittest.TestCase):
+    """A diferença entre "busquei e não tinha" e "não consegui buscar".
+
+    Confundir as duas custou 946 vagas da Vagas.com.br: um 429 da Cloudflare
+    foi gravado como se fosse resposta legítima, marcando cada vaga como já
+    tentada — e elas nunca mais seriam enriquecidas.
+    """
+
+    def setUp(self):
+        from hirehub import coleta
+        self.coleta = coleta
+        config.BANCO.unlink(missing_ok=True)
+        self.con = db.abrir()
+        db.salvar(self.con, [_vaga(link=f"https://x/{i}", fonte="infojobs")
+                             for i in range(3)], "c1")
+        self.fonte = fontes.por_id("infojobs")
+        self.original = self.fonte.__class__.detalhar
+        self.cfg = {**config.PADROES, "threads": 1}
+
+    def tearDown(self):
+        self.fonte.__class__.detalhar = self.original
+        self.con.close()
+
+    def _com_detalhar(self, funcao):
+        self.fonte.__class__.detalhar = staticmethod(funcao)
+
+    def test_falha_de_rede_nao_marca_a_vaga_como_tentada(self):
+        self._com_detalhar(lambda vaga: None)
+        self.coleta._enriquecer(self.con, self.fonte, self.cfg)
+        self.assertEqual(len(db.pendentes_detalhe(self.con, "infojobs", 10)), 3,
+                         "todas devem continuar pendentes")
+
+    def test_vaga_sem_descricao_na_origem_nao_e_retentada(self):
+        self._com_detalhar(lambda vaga: {"descricao": ""})
+        self.coleta._enriquecer(self.con, self.fonte, self.cfg)
+        self.assertEqual(db.pendentes_detalhe(self.con, "infojobs", 10), [])
+
+    def test_sucesso_grava_e_sai_da_fila(self):
+        self._com_detalhar(lambda vaga: {"descricao": "Texto", "salario": "R$ 1"})
+        self.coleta._enriquecer(self.con, self.fonte, self.cfg)
+        self.assertEqual(db.pendentes_detalhe(self.con, "infojobs", 10), [])
+        linha = db.por_id(self.con, texto.id_da_vaga("https://x/0"))
+        self.assertEqual(linha["descricao"], "Texto")
+        self.assertEqual(linha["salario"], "R$ 1")
+
+    def test_fonte_pode_baixar_o_proprio_teto_mas_nao_subir(self):
+        """`threads` e `detalhes_por_execucao` do conector são limites, não
+        permissões: a Vagas.com.br precisa ir mais devagar que o global, e
+        nenhuma fonte pode decidir ir mais rápido."""
+        vagas = fontes.por_id("vagas")
+        self.assertLess(vagas.threads, config.PADROES["threads"],
+                        "a Vagas.com.br precisa ir mais devagar que o global")
+
+        # Global folgado: vale o teto da fonte.
+        folgado = {"threads": 6, "detalhes_por_execucao": 400}
+        self.assertEqual(min(folgado["threads"], vagas.threads), vagas.threads)
+        self.assertEqual(min(folgado["detalhes_por_execucao"],
+                             vagas.detalhes_por_execucao), vagas.detalhes_por_execucao)
+
+        # Global apertado: vale o global — a fonte não usa o próprio número
+        # para ir mais rápido do que a configuração permite.
+        apertado = {"threads": 1, "detalhes_por_execucao": 10}
+        self.assertEqual(min(apertado["threads"], vagas.threads), 1)
+        self.assertEqual(
+            min(apertado["detalhes_por_execucao"], vagas.detalhes_por_execucao), 10)
 
 
 class CompatibilidadeDeVersao(unittest.TestCase):

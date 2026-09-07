@@ -29,6 +29,12 @@ def _abrir(url, headers, aceita, tentativas):
             with urllib.request.urlopen(pedido, timeout=TIMEOUT) as resposta:
                 return resposta.read()
         except urllib.error.HTTPError as erro:
+            if erro.code == 429:
+                # Limite de taxa. Insistir é o pior movimento possível: só
+                # aprofunda o bloqueio. Sai na hora e deixa o chamador tratar
+                # como falha transitória — o Retry-After costuma vir em horas.
+                _avisar_limite(url, erro)
+                return None
             if erro.code < 500:
                 return None  # 4xx é definitivo: insistir só gasta tempo
         except Exception:
@@ -36,6 +42,26 @@ def _abrir(url, headers, aceita, tentativas):
         if tentativa < tentativas:
             time.sleep(0.5 * (2 ** tentativa))  # backoff exponencial
     return None
+
+
+_limites_avisados = set()
+
+
+def _avisar_limite(url, erro):
+    """Avisa uma vez por domínio, não uma vez por requisição.
+
+    Sem isso, um bloqueio de taxa vira milhares de linhas idênticas no log e
+    esconde justamente a informação que interessa — que a origem parou de
+    responder e por quanto tempo.
+    """
+    dominio = urllib.parse.urlparse(url).netloc
+    if dominio in _limites_avisados:
+        return
+    _limites_avisados.add(dominio)
+    espera = erro.headers.get("Retry-After", "?")
+    print(f"[hirehub] {dominio} respondeu 429 (limite de taxa). "
+          f"Retry-After: {espera}s. Reduza `threads` ou "
+          f"`detalhes_por_execucao` dessa fonte.", flush=True)
 
 
 def json_de(url, headers=None, tentativas=2):

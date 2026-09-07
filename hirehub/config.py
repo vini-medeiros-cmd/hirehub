@@ -44,6 +44,10 @@ PADROES = {
     # numa cidade por geolocalização —, então a cobertura É esta lista, e ela
     # fica na configuração para crescer sem mexer no código.
     "infojobs_cidades": [],
+    # Vagas.com.br: mesma ideia, mas o slug não leva UF ("sao-paulo",
+    # "rio-de-janeiro"). 40 vagas por página.
+    "vagas_paginas_por_cidade": 5,
+    "vagas_cidades": [],
     # Requisições de detalhe por fonte, por execução. Segura o tempo de cada
     # rodada; o cache converge ao longo das execuções seguintes.
     "detalhes_por_execucao": 400,

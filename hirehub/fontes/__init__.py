@@ -46,6 +46,15 @@ class Fonte:
     # Só quem marca True participa da regra de "saiu do ar" (ver db.NO_AR).
     cobertura_completa = False
 
+    # Tetos próprios, para fontes que não aguentam o ritmo geral. None = usa a
+    # configuração global. Nunca sobem além dela: são limites, não permissões.
+    #
+    # Existem porque a Vagas.com.br respondeu 429 com Retry-After de 24 HORAS
+    # depois de 968 páginas de detalhe a 8 threads. Volume de coleta não é só
+    # questão de tempo de execução — é de não ser bloqueado pela origem.
+    threads = None
+    detalhes_por_execucao = None
+
     def coletar(self, cfg, log):
         raise NotImplementedError
 

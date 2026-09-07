@@ -127,20 +127,43 @@ def _enriquecer(con, fonte, cfg):
     """
     if not fonte.detalhar:
         return 0
-    pendentes = db.pendentes_detalhe(con, fonte.id, cfg["detalhes_por_execucao"])
+    teto = min(cfg["detalhes_por_execucao"],
+               fonte.detalhes_por_execucao or cfg["detalhes_por_execucao"])
+    pendentes = db.pendentes_detalhe(con, fonte.id, teto)
     if not pendentes:
         return 0
 
-    log(f"  {fonte.nome}: buscando detalhe de {len(pendentes)} vagas")
-    gravados = 0
+    threads = min(cfg["threads"], fonte.threads or cfg["threads"])
+    log(f"  {fonte.nome}: buscando detalhe de {len(pendentes)} vagas"
+        + (f" ({threads} threads)" if threads != cfg["threads"] else ""))
+
+    gravados, falhas = 0, 0
     for inicio in range(0, len(pendentes), LOTE_DETALHES):
         lote = pendentes[inicio:inicio + LOTE_DETALHES]
         resultados = net.em_paralelo(
-            lambda v: (v["id"], fonte.detalhar(v)), lote, cfg["threads"])
-        gravados += db.gravar_detalhes(con, [r for r in resultados if r])
+            lambda v: (v["id"], fonte.detalhar(v)), lote, threads)
+
+        # A distinção que dá sentido ao contrato de `detalhar`:
+        #   dict  = "busquei; isto é o que existe" (pode ser descrição vazia)
+        #   None  = "não consegui buscar" — transitório, tenta na próxima
+        # Gravar o None marcaria a vaga como já tentada e ela nunca mais seria
+        # enriquecida. Foi assim que 946 vagas ficaram sem descrição para
+        # sempre depois de um 429 da Cloudflare: o erro passou por sucesso.
+        obtidos = [r for r in resultados if r and r[1] is not None]
+        falhas += len(lote) - len(obtidos)
+        gravados += db.gravar_detalhes(con, obtidos)
+
+        # Uma fonte que começou a recusar não melhora insistindo: para e deixa
+        # o resto para a próxima execução.
+        if len(obtidos) == 0 and len(lote) >= LOTE_DETALHES:
+            log(f"  {fonte.nome}: lote inteiro falhou — interrompendo "
+                f"(a origem pode estar limitando; o resto fica para a próxima)")
+            break
         if len(pendentes) > LOTE_DETALHES:
             log(f"    {gravados}/{len(pendentes)}")
-    log(f"  {fonte.nome}: {gravados} detalhes gravados")
+
+    log(f"  {fonte.nome}: {gravados} detalhes gravados"
+        + (f", {falhas} não obtidos (serão tentados de novo)" if falhas else ""))
     return gravados
 
 

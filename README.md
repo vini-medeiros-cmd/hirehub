@@ -61,9 +61,55 @@ escrita à mão.
 | Fonte | Cobertura | Descrição da vaga | Observação |
 |---|---|---|---|
 | **Gupy** | 10.000 mais recentes | vem na listagem | teto de paginação da API (`offset + limit ≤ 10.000`) |
-| **InHire** | completa (~8.800) | 1 requisição por vaga | exige `data/inhire-tenants.json`; não tem busca global |
+| **InHire** | completa (~8.900) | 1 requisição por vaga | exige `data/inhire-tenants.json`; não tem busca global |
 | **InfoJobs** | por cidade | 1 requisição por vaga | HTML raspado, sem API |
+| **Vagas.com.br** | por cidade | 1 requisição por vaga | listagem raspada; detalhe em JSON-LD |
 | **Sólides** | estatística | vem na listagem | **hoje devolve zero** — ver abaixo |
+
+Só a **InHire** declara `cobertura_completa`. As demais entregam uma janela, e
+por isso não marcam vaga como "saiu do ar" — ausência ali significa que
+chegaram anúncios mais novos, não que o anúncio fechou.
+
+### Vagas.com.br: JSON-LD em vez de raspagem, no detalhe
+
+A listagem é HTML raspado (`<li class="vaga">`), mas cada página de vaga
+publica um bloco **JSON-LD `JobPosting`** do schema.org, com `datePosted`,
+descrição completa, empresa e localidade em campos nomeados. Marcação que
+existe para os buscadores lerem muda muito menos que classe de CSS, então a
+parte frágil fica restrita à listagem.
+
+Vale procurar por esse bloco em qualquer fonte nova antes de partir para
+raspagem — a função `_json_ld_jobposting` em `fontes/vagas.py` é genérica.
+
+A listagem nacional (`/vagas-de-emprego`) é uma seleção curada de ~120 vagas; o
+catálogo real só é alcançável por cidade. Medido: São Paulo tem 992 vagas
+alcançáveis, 40 por página, paginação até o fim sem repetir.
+
+**Ela está atrás de Cloudflare e não avisa antes de bloquear.** 968 páginas de
+detalhe a 8 threads renderam um `429` com `Retry-After` de **24 horas**. Por
+isso o conector declara tetos próprios (`threads = 2`,
+`detalhes_por_execucao = 120`), calibrados para o enriquecimento ocupar cerca
+de um minuto de tráfego a cada 6 horas: o acervo converge em alguns dias sem
+incomodar a origem. Não suba esses números sem medir.
+
+Os tetos da fonte são limites, nunca permissões — se a configuração global for
+mais apertada, vale a global.
+
+### Plataformas avaliadas e descartadas
+
+Registradas para ninguém reinvestigar. Avaliado em 04/09/2026:
+
+| Plataforma | Motivo |
+|---|---|
+| **Catho** | `robots.txt` proíbe `/buscar/vagas/` — a própria busca de vagas |
+| **Indeed** | `robots.txt` proíbe `/empregos/BR/` e `/emprego/` |
+| **BNE** | 1,7 milhão de vagas, mas renderiza **uma por página**, mesmo na busca por cidade. Coletar exigiria uma requisição por vaga |
+| **Trabalha Brasil** | sem JSON-LD e sem API; só raspagem pesada de HTML |
+| **Abler, Quickin** | ATS por empresa, como a InHire — precisariam de lista de tenants própria. Viável, mas é trabalho de descoberta à parte |
+| **Greenhouse, Lever, Ashby, Workable** | ATS globais com API pública limpa, mas por empresa e com pouca adoção no Brasil fora de startups |
+
+Catho e Indeed ficam de fora por decisão delas, não nossa: são as duas maiores
+do país e o `robots.txt` de ambas bloqueia justamente as páginas de vaga.
 
 ### Sólides: sem retorno desde 03/09/2026
 
