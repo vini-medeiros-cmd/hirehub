@@ -19,10 +19,14 @@ User=hirehub
 Group=hirehub
 WorkingDirectory=/opt/hirehub
 
-# TROQUE PELO DOMÍNIO REAL antes de publicar. Daqui saem as URLs canônicas, o
-# sitemap.xml e o robots.txt — errado aqui, os buscadores indexam um endereço
-# que não existe.
-Environment=HIREHUB_URL=https://hirehub.com.br
+# TROQUE PELO ENDEREÇO REAL desta instalação. Daqui saem as URLs canônicas, o
+# sitemap.xml e o robots.txt — errado aqui, os buscadores são instruídos a
+# indexar um endereço que não existe.
+#
+# Sem domínio, o IP serve: http://SEU.IP.AQUI — só lembre de atualizar se o IP
+# mudar. Na Oracle, IP "Ephemeral" some junto com a instância; converter para
+# "Reserved" (sem custo) evita essa surpresa.
+Environment=HIREHUB_URL=http://SEU.IP.AQUI
 
 ExecStart=/usr/bin/python3 /opt/hirehub/bin/servir.py 127.0.0.1 8080
 Restart=always

@@ -343,6 +343,31 @@ Falta ainda o SELinux e o firewall, abaixo — o script cuida dos dois.
 
 </details>
 
+### Sem domínio
+
+Funciona, e para uso pessoal é o suficiente: aponte o `HIREHUB_URL` para o IP.
+
+```bash
+sudo sed -i 's|HIREHUB_URL=.*|HIREHUB_URL=http://SEU.IP|' /etc/systemd/system/hirehub-web.service
+sudo systemctl daemon-reload && sudo systemctl restart hirehub-web
+```
+
+Fica em HTTP puro, e aqui isso protege pouco de qualquer forma: o HireHub não
+tem login, não recebe currículo e não guarda nada de quem visita. O que passa
+pela rede é uma lista pública de vagas.
+
+Duas consequências que valem saber:
+
+* **O IP precisa ser estável.** Na Oracle, o público vem como *Ephemeral* e
+  desaparece com a instância. Converter para *Reserved* não custa e evita ter
+  de reconfigurar tudo depois.
+* **Não haverá indexação real.** Buscadores praticamente não indexam IP nu, e
+  o `sitemap.xml` fica decorativo. Se um dia quiser isso sem gastar, um
+  subdomínio gratuito (DuckDNS e afins) resolve o nome *e* destrava o
+  Let's Encrypt.
+
+### Com domínio
+
 TLS: o certbot vem do EPEL no Oracle Linux.
 
 ```bash
