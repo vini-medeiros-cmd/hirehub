@@ -59,12 +59,13 @@ if sys.version_info < (3, 9):
 print(f"  Python {sys.version.split()[0]} — ok")
 PY
 
-passo "Pacotes"
-dnf install -y -q git nginx policycoreutils-python-utils
-
-# 1 GB sem swap é o padrão da E2.1.Micro. A coleta tem pico medido de ~203 MB,
-# mas o kernel precisa de para onde correr quando o Nginx, o SQLite e o VACUUM
-# coincidem. Em shapes maiores (A1.Flex) este trecho é inofensivo: só pula.
+# O SWAP VEM ANTES DOS PACOTES, e isso não é detalhe de ordem: o próprio dnf é
+# um programa Python que carrega os metadados dos repositórios na memória, e
+# numa E2.1.Micro (1 GB, sem swap de fábrica) ele trava no primeiro
+# `dnf install` — sem erro, sem sair, só parado. Foi o que aconteceu na
+# primeira instalação real.
+#
+# Em shapes maiores (A1.Flex) o bloco simplesmente não se aplica.
 if [[ $(free -m | awk '/^Mem:/{print $2}') -lt 2048 ]] && ! swapon --show | grep -q .; then
   passo "Criando ${SWAP_GB} GB de swap (memória baixa e nenhum swap ativo)"
   fallocate -l "${SWAP_GB}G" /swapfile
@@ -72,7 +73,30 @@ if [[ $(free -m | awk '/^Mem:/{print $2}') -lt 2048 ]] && ! swapon --show | grep
   mkswap -q /swapfile
   swapon /swapfile
   grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  free -m | awk '/^Swap:/{printf "  swap ativo: %s MB\n", $2}'
 fi
+
+# UM PACOTE POR VEZ, e não os três de uma tacada.
+#
+# Medido numa E2.1.Micro (945 MB, com 944 MB de swap já ativos): o dnf foi
+# morto pelo OOM killer instalando os três juntos. Ele é um programa Python que
+# carrega os metadados de TODOS os repositórios do Oracle Linux na memória, e o
+# pico cresce com o tamanho da transação. Um de cada vez cabe.
+#
+# `install_weak_deps=False` corta os "Recommends", que aqui só trazem peso.
+# `max_parallel_downloads=1` evita vários downloads simultâneos na memória.
+# Sem `-q`: na primeira execução isso leva minutos, e em silêncio não dá para
+# distinguir trabalho de travamento — a diferença importa para quem está
+# olhando a tela.
+passo "Pacotes (um por vez; a primeira vez baixa os metadados e demora)"
+for pacote in git nginx policycoreutils-python-utils; do
+  echo "  --- $pacote"
+  rpm -q "$pacote" &>/dev/null && { echo "  já instalado"; continue; }
+  dnf install -y \
+      --setopt=install_weak_deps=False \
+      --setopt=max_parallel_downloads=1 \
+      "$pacote"
+done
 
 passo "Usuário de serviço e código"
 id -u "$USUARIO" &>/dev/null || useradd -r -s /sbin/nologin -d "$DESTINO" "$USUARIO"
