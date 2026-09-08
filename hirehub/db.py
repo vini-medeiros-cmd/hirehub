@@ -61,7 +61,13 @@ CREATE TABLE IF NOT EXISTS meta (chave TEXT PRIMARY KEY, valor TEXT);
 
 # Colunas acrescentadas depois que já havia banco em produção. CREATE TABLE IF
 # NOT EXISTS não altera tabela existente, então elas entram por ALTER.
-MIGRACOES = [("fontes", "cobertura_completa", "INTEGER DEFAULT 0")]
+MIGRACOES = [
+    ("fontes", "cobertura_completa", "INTEGER DEFAULT 0"),
+    # Até quando a origem pediu para não ser incomodada (429). Persistido
+    # porque cada coleta é um processo novo: em memória, a espera se perderia
+    # e a rodada seguinte voltaria a bater na porta de quem já disse não.
+    ("fontes", "bloqueado_ate", "TEXT"),
+]
 
 
 def _migrar(con):
@@ -230,6 +236,22 @@ def ler_meta(con):
         return dict(con.execute("SELECT chave, valor FROM meta").fetchall())
     except sqlite3.OperationalError:
         return {}
+
+
+def horas_bloqueada(con, id_fonte):
+    """Horas que ainda faltam da espera pedida pela origem num 429. 0 = liberada."""
+    try:
+        linha = con.execute(
+            "SELECT bloqueado_ate FROM fontes WHERE id=?", (id_fonte,)).fetchone()
+    except sqlite3.OperationalError:
+        return 0.0
+    if not linha or not linha["bloqueado_ate"]:
+        return 0.0
+    try:
+        ate = datetime.fromisoformat(linha["bloqueado_ate"])
+    except ValueError:
+        return 0.0
+    return max(0.0, (ate - datetime.now(timezone.utc)).total_seconds() / 3600)
 
 
 def status_fontes(con):

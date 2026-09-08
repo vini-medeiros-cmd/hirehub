@@ -327,6 +327,34 @@ class Enriquecimento(unittest.TestCase):
         self.assertEqual(linha["descricao"], "Texto")
         self.assertEqual(linha["salario"], "R$ 1")
 
+    def test_origem_que_pediu_pausa_nao_e_incomodada_de_novo(self):
+        """429 com Retry-After de 24h significa 24h — não "tente de novo em 6".
+
+        A espera vai para o banco porque cada coleta é um processo novo: em
+        memória ela se perderia e a rodada seguinte bateria na mesma porta.
+        """
+        from datetime import datetime, timedelta, timezone
+        futuro = (datetime.now(timezone.utc) + timedelta(hours=20)).isoformat()
+        db.anotar_fonte(self.con, "infojobs", "InfoJobs", bloqueado_ate=futuro)
+
+        chamadas = []
+        self._com_detalhar(lambda vaga: chamadas.append(vaga) or {"descricao": "x"})
+        self.coleta._enriquecer(self.con, self.fonte, self.cfg)
+
+        self.assertEqual(chamadas, [], "não pode ter buscado nada")
+        self.assertEqual(len(db.pendentes_detalhe(self.con, "infojobs", 10)), 3)
+        self.assertGreater(db.horas_bloqueada(self.con, "infojobs"), 19)
+
+    def test_espera_vencida_libera_a_fonte(self):
+        from datetime import datetime, timedelta, timezone
+        passado = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        db.anotar_fonte(self.con, "infojobs", "InfoJobs", bloqueado_ate=passado)
+        self.assertEqual(db.horas_bloqueada(self.con, "infojobs"), 0)
+
+        self._com_detalhar(lambda vaga: {"descricao": "voltou"})
+        self.coleta._enriquecer(self.con, self.fonte, self.cfg)
+        self.assertEqual(db.pendentes_detalhe(self.con, "infojobs", 10), [])
+
     def test_fonte_pode_baixar_o_proprio_teto_mas_nao_subir(self):
         """`threads` e `detalhes_por_execucao` do conector são limites, não
         permissões: a Vagas.com.br precisa ir mais devagar que o global, e

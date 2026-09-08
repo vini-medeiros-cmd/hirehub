@@ -159,6 +159,13 @@ def _enriquecer(con, fonte, cfg):
     if not pendentes:
         return 0
 
+    # A origem pediu para esperar (429) e a espera ainda não venceu. Insistir a
+    # cada 6 horas contra quem já disse não é falta de educação e não adianta.
+    if (falta := db.horas_bloqueada(con, fonte.id)) > 0:
+        log(f"  {fonte.nome}: enriquecimento em espera por mais ~{falta:.0f}h "
+            f"(a origem respondeu 429)")
+        return 0
+
     threads = min(cfg["threads"], fonte.threads or cfg["threads"])
     log(f"  {fonte.nome}: buscando detalhe de {len(pendentes)} vagas"
         + (f" ({threads} threads)" if threads != cfg["threads"] else ""))
@@ -187,6 +194,14 @@ def _enriquecer(con, fonte, cfg):
             break
         if len(pendentes) > LOTE_DETALHES:
             log(f"    {gravados}/{len(pendentes)}")
+
+    # Se a origem devolveu 429 durante o lote, guarda a espera no banco. Cada
+    # coleta é um processo novo: em memória, a espera se perderia e a rodada
+    # das 6 horas seguintes voltaria a bater na mesma porta.
+    if ate := net.limite_de(pendentes[0]["link"]):
+        db.anotar_fonte(con, fonte.id, fonte.nome,
+                        bloqueado_ate=datetime.fromtimestamp(
+                            ate, timezone.utc).isoformat())
 
     log(f"  {fonte.nome}: {gravados} detalhes gravados"
         + (f", {falhas} não obtidos (serão tentados de novo)" if falhas else ""))

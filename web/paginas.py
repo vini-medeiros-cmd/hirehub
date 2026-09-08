@@ -379,7 +379,16 @@ def situacao(fonte):
         return "erro", "Nunca coletada"
     if not fonte.get("vagas"):
         return "alerta", "Sem retorno"
+    # A coleta da listagem foi bem; só o enriquecimento está em espera porque a
+    # origem pediu (429). As vagas estão no ar, algumas sem descrição.
+    if _bloqueio_ativo(fonte):
+        return "alerta", "Aguardando limite de taxa"
     return "ok", "Operacional"
+
+
+def _bloqueio_ativo(fonte):
+    ate = _local(fonte.get("bloqueado_ate"))
+    return bool(ate and ate > datetime.now(FUSO))
 
 
 # ------------------------------------------------------------------ páginas
@@ -584,7 +593,9 @@ def status(ctx, fontes):
                 </div>
                 <p class="detalhe-fonte">{detalhe}</p>
                 <p class="quando">Última coleta:
-                   {e(data_hora(f.get('ultima_coleta')) or '—')}</p>
+                   {e(data_hora(f.get('ultima_coleta')) or '—')}
+                   {f' · descrições em espera até {data_hora(f["bloqueado_ate"])}'
+                    if _bloqueio_ativo(f) else ''}</p>
               </li>""")
         corpo = f'<ul class="status-fontes">{"".join(linhas)}</ul>'
 
@@ -597,6 +608,9 @@ def status(ctx, fontes):
   <p><strong>Operacional</strong> — a última coleta trouxe vagas normalmente.<br>
      <strong>Sem retorno</strong> — a plataforma respondeu, mas não devolveu
      nenhuma vaga. Costuma ser mudança na API de origem.<br>
+     <strong>Aguardando limite de taxa</strong> — as vagas foram coletadas
+     normalmente, mas a plataforma pediu uma pausa antes de responder às
+     páginas de detalhe. Algumas vagas ficam sem descrição até lá.<br>
      <strong>Falha</strong> — a coleta terminou em erro. O motivo aparece ao lado.</p>
   <p>As vagas já coletadas continuam no ar mesmo quando uma fonte falha: a base
      é acumulada, e uma coleta ruim não apaga as anteriores.</p>

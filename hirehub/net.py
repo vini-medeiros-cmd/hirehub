@@ -44,24 +44,36 @@ def _abrir(url, headers, aceita, tentativas):
     return None
 
 
-_limites_avisados = set()
+# Domínios que responderam 429 nesta execução: {domínio: epoch de liberação}.
+# O orquestrador consulta isto para persistir a espera e não voltar antes.
+LIMITES = {}
+# Teto para o Retry-After. Um cabeçalho absurdo (ou malformado) não pode
+# desligar uma fonte por semanas — passado o teto, tentamos de novo.
+MAX_ESPERA = 48 * 3600
+
+
+def limite_de(url):
+    """Até quando este domínio pediu para não ser incomodado. None se não pediu."""
+    return LIMITES.get(urllib.parse.urlparse(url).netloc)
 
 
 def _avisar_limite(url, erro):
-    """Avisa uma vez por domínio, não uma vez por requisição.
+    """Registra e avisa uma vez por domínio, não uma vez por requisição.
 
     Sem isso, um bloqueio de taxa vira milhares de linhas idênticas no log e
     esconde justamente a informação que interessa — que a origem parou de
     responder e por quanto tempo.
     """
     dominio = urllib.parse.urlparse(url).netloc
-    if dominio in _limites_avisados:
+    try:
+        espera = min(int(erro.headers.get("Retry-After", "3600")), MAX_ESPERA)
+    except (TypeError, ValueError):
+        espera = 3600  # veio em formato de data, ou não veio; uma hora serve
+    if dominio in LIMITES:
         return
-    _limites_avisados.add(dominio)
-    espera = erro.headers.get("Retry-After", "?")
+    LIMITES[dominio] = time.time() + espera
     print(f"[hirehub] {dominio} respondeu 429 (limite de taxa). "
-          f"Retry-After: {espera}s. Reduza `threads` ou "
-          f"`detalhes_por_execucao` dessa fonte.", flush=True)
+          f"Aguardando {espera / 3600:.1f}h antes de tentar de novo.", flush=True)
 
 
 def json_de(url, headers=None, tentativas=2):
