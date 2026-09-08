@@ -18,8 +18,29 @@ from datetime import datetime, timezone
 from . import config, db, fontes, net, texto
 
 
+_saida_viva = True
+
+
 def log(msg):
-    print(f"[{datetime.now():%H:%M:%S}] {msg}", flush=True)
+    """Escreve no log, e desiste em silêncio se a saída padrão morreu.
+
+    Sem isto, uma saída fechada derruba a coleta pelo caminho mais confuso
+    possível: o `print` estoura BrokenPipeError DENTRO do try de uma fonte, e o
+    orquestrador registra "InfoJobs: falha na última coleta — BrokenPipeError"
+    na página /status. A fonte não falhou; quem morreu foi o log.
+
+    Acontece de verdade e sem nada de exótico: basta um `coletar.py | head`, ou
+    o terminal fechar durante uma execução manual. E não é motivo para parar de
+    coletar — o que importa é o banco, não o texto na tela. A flag garante que
+    a tentativa aconteça uma vez só, em vez de uma exceção por linha.
+    """
+    global _saida_viva
+    if not _saida_viva:
+        return
+    try:
+        print(f"[{datetime.now():%H:%M:%S}] {msg}", flush=True)
+    except (BrokenPipeError, ValueError, OSError):
+        _saida_viva = False
 
 
 def _travar():
@@ -102,6 +123,11 @@ def _coletar_fonte(con, fonte, cfg, carimbo):
         )
         log(f"  {fonte.nome}: {len(vagas)} vagas ({novas} novas) em {duracao:.0f}s")
         return novas
+    except BrokenPipeError:
+        # Nunca é culpa da fonte: é a saída do processo que sumiu. Registrar
+        # isso como falha da plataforma mancharia a página /status com um erro
+        # que não tem nada a ver com ela. Sobe e deixa a execução terminar.
+        raise
     except Exception as erro:
         db.anotar_fonte(
             con, fonte.id, fonte.nome, ultima_coleta=carimbo,

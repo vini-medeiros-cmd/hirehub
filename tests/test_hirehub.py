@@ -349,6 +349,62 @@ class Enriquecimento(unittest.TestCase):
             min(apertado["detalhes_por_execucao"], vagas.detalhes_por_execucao), 10)
 
 
+class LogResiliente(unittest.TestCase):
+    """Saída padrão morta não pode virar "falha da plataforma" no /status.
+
+    Aconteceu de verdade: um `coletar.py | head -4` fechou o pipe, o print
+    estourou dentro do try da InfoJobs, e a página de status passou dias
+    dizendo "InfoJobs: BrokenPipeError" — sobre uma fonte que estava perfeita.
+    """
+
+    def setUp(self):
+        from hirehub import coleta
+        self.coleta = coleta
+        coleta._saida_viva = True
+
+    def tearDown(self):
+        self.coleta._saida_viva = True
+
+    def test_saida_fechada_nao_levanta_nem_repete_a_tentativa(self):
+        import io
+
+        class SaidaMorta(io.StringIO):
+            def __init__(self):
+                super().__init__()
+                self.tentativas = 0
+
+            def write(self, _):
+                self.tentativas += 1
+                raise BrokenPipeError(32, "Broken pipe")
+
+        morta = SaidaMorta()
+        original = sys.stdout
+        sys.stdout = morta
+        try:
+            self.coleta.log("primeira")   # descobre que a saída morreu
+            self.coleta.log("segunda")    # já nem tenta
+            self.coleta.log("terceira")
+        finally:
+            sys.stdout = original
+
+        self.assertEqual(morta.tentativas, 1,
+                         "deve desistir depois da primeira falha")
+        self.assertFalse(self.coleta._saida_viva)
+
+    def test_saida_viva_continua_escrevendo(self):
+        import io
+        viva = io.StringIO()
+        original = sys.stdout
+        sys.stdout = viva
+        try:
+            self.coleta.log("um")
+            self.coleta.log("dois")
+        finally:
+            sys.stdout = original
+        self.assertIn("um", viva.getvalue())
+        self.assertIn("dois", viva.getvalue())
+
+
 class CompatibilidadeDeVersao(unittest.TestCase):
     """Guarda contra escrever código que só roda na máquina de desenvolvimento.
 
