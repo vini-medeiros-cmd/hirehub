@@ -27,6 +27,30 @@ aviso() { printf '\033[1;33m !\033[0m %s\n' "$1"; }
 
 [[ $EUID -eq 0 ]] || { echo "Rode com sudo."; exit 1; }
 
+# Este script é a PRIMEIRA coisa a rodar numa VPS recém-criada, e a confusão
+# mais fácil de cometer é executá-lo na própria máquina em vez de na instância
+# — basta o SSH cair sem você perceber. Antes desta checagem, o sintoma era um
+# "dnf: comando não encontrado" que não explicava nada. Ele criaria usuário de
+# sistema, swap e serviços na máquina errada se o gerenciador de pacotes
+# coincidisse.
+if ! command -v dnf &>/dev/null; then
+  cat >&2 <<AVISO
+
+  ERRO: este script é para Oracle Linux / RHEL, e aqui não existe 'dnf'.
+
+  Sistema detectado: $(. /etc/os-release 2>/dev/null && echo "$PRETTY_NAME" || uname -s)
+  Máquina:           $(hostname)
+
+  Você está rodando na SUA máquina em vez da VPS? Conecte primeiro:
+
+      ssh -i SUA_CHAVE opc@SEU_IP
+
+  e confira que o prompt virou algo como [opc@hirehub ~]\$ antes de continuar.
+
+AVISO
+  exit 1
+fi
+
 passo "Conferindo o Python (o piso do projeto é 3.9)"
 python3 - <<'PY'
 import sys
