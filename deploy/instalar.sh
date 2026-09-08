@@ -76,12 +76,44 @@ fi
 
 passo "Usuário de serviço e código"
 id -u "$USUARIO" &>/dev/null || useradd -r -s /sbin/nologin -d "$DESTINO" "$USUARIO"
-if [[ -d "$DESTINO/.git" ]]; then
+
+# De onde vem o código: da cópia em que este script está, se ele foi executado
+# de dentro de uma, ou do GitHub. A primeira forma é o que permite instalar sem
+# depender do repositório ser público — basta um scp da pasta e rodar o script
+# de dentro dela.
+ORIGEM="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || true)"
+if [[ -n "$ORIGEM" && -f "$ORIGEM/bin/coletar.py" && "$ORIGEM" != "$DESTINO" ]]; then
+  echo "  copiando de $ORIGEM"
+  mkdir -p "$DESTINO"
+  # tar em vez de cp -a: exclui .git e cache, e — o que importa — NÃO carrega
+  # o banco. Assim reinstalar por cima nunca apaga as vagas já coletadas no
+  # destino, que levam minutos para voltar.
+  tar -C "$ORIGEM" --exclude=.git --exclude=__pycache__ \
+      --exclude='data/*.db' --exclude='data/*.db-wal' --exclude='data/*.db-shm' \
+      --exclude='data/cache' -cf - . | tar -C "$DESTINO" -xf -
+elif [[ -d "$DESTINO/.git" ]]; then
+  echo "  atualizando do GitHub"
   git -C "$DESTINO" fetch --quiet origin
   git -C "$DESTINO" reset --hard --quiet origin/HEAD
 else
-  rm -rf "$DESTINO"
-  git clone --quiet "$REPO" "$DESTINO"
+  echo "  clonando de $REPO"
+  git clone --quiet "$REPO" "$DESTINO" || {
+    echo >&2 "
+  Não consegui clonar $REPO.
+
+  Se o repositório for PRIVADO, a VPS não tem como acessá-lo. Duas saídas:
+    1. torne-o público no GitHub, ou
+    2. copie a pasta da sua máquina e rode o script de dentro dela:
+
+       # na sua máquina
+       tar czf /tmp/hirehub.tgz --exclude=.git --exclude='data/*.db' .
+       scp -i SUA_CHAVE /tmp/hirehub.tgz opc@SEU_IP:/tmp/
+       # na VPS
+       mkdir -p /tmp/hirehub && tar xzf /tmp/hirehub.tgz -C /tmp/hirehub
+       sudo bash /tmp/hirehub/deploy/instalar.sh
+"
+    exit 1
+  }
 fi
 chown -R "$USUARIO:$USUARIO" "$DESTINO"
 # O Nginx roda como outro usuário e lê /static direto do disco.
