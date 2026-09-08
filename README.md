@@ -307,6 +307,21 @@ python3 --version
 
 ### Instalação
 
+Um comando, com o script de `deploy/`. O Oracle Linux minimal **não traz git**,
+então o script vem por `curl` — ele instala o resto sozinho:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vini-medeiros-cmd/hirehub/master/deploy/instalar.sh -o /tmp/instalar.sh
+sudo bash /tmp/instalar.sh
+```
+
+Ele recusa rodar fora do Oracle Linux, dizendo qual máquina detectou — a
+confusão fácil aqui é a sessão SSH cair sem você perceber e o script rodar na
+sua própria máquina.
+
+<details>
+<summary>Ou passo a passo, se preferir conferir cada etapa</summary>
+
 ```bash
 sudo dnf install -y git nginx
 sudo useradd -r -s /sbin/nologin -d /opt/hirehub hirehub   # em Debian: /usr/sbin/nologin
@@ -323,6 +338,10 @@ sudo systemctl enable --now hirehub-web.service hirehub-coleta.timer
 sudo cp deploy/nginx.conf /etc/nginx/conf.d/hirehub.conf   # em Debian: sites-available + symlink
 sudo nginx -t && sudo systemctl enable --now nginx
 ```
+
+Falta ainda o SELinux e o firewall, abaixo — o script cuida dos dois.
+
+</details>
 
 TLS: o certbot vem do EPEL no Oracle Linux.
 
