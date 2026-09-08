@@ -1,4 +1,4 @@
-"""Sólides — a única das quatro que publica salário.
+"""Sólides — a plataforma que publicava salário antes de esvaziar.
 
 ATENÇÃO, medido em 03/09/2026: o endpoint responde 200 com `success: true` e
 `count: 0` para qualquer combinação de take/page/search. Ele não quebrou, ele

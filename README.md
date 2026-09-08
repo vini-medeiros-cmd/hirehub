@@ -2,10 +2,13 @@
 
 **O hub das oportunidades, seu próximo emprego começa aqui.**
 
-Agregador público e gratuito de vagas. Coleta anúncios de quatro plataformas de
+Agregador público e gratuito de vagas. Coleta anúncios de seis plataformas de
 recrutamento, normaliza tudo numa base própria e serve num só lugar — sem
 cadastro, sem login, sem candidatura interna. O botão *Candidatar-se* leva para
 a vaga original.
+
+No ar em **http://163.176.175.26** — rodando numa VPS gratuita da Oracle Cloud,
+em Python sem uma única dependência externa.
 
 ```
 Coletar → Normalizar → Armazenar → Exibir → Redirecionar
@@ -159,6 +162,9 @@ crie `data/hirehub.config.json`:
   "solides_paginas": 150,
   "infojobs_paginas_por_cidade": 3,
   "infojobs_cidades": [],
+  "vagas_paginas_por_cidade": 5,
+  "vagas_cidades": [],
+  "trampos_paginas": 30,
   "detalhes_por_execucao": 400,
   "esquecer_apos_dias": 120,
   "threads": 6,
@@ -242,7 +248,7 @@ hirehub/
 
 ### Regras de negócio
 
-Valem para as quatro fontes, e são o que o sistema garante independentemente de
+Valem para todas as fontes, e são o que o sistema garante independentemente de
 qual plataforma quebrar:
 
 1. **Nunca há filtro de cargo na coleta.** Puxa tudo que a API permite; a

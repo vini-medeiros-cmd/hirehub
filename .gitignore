@@ -1,9 +1,16 @@
 __pycache__/
 *.pyc
+
+# Banco, cache e configuração real: gerados em cada instalação, nunca versionados.
 data/*.db
 data/*.db-wal
 data/*.db-shm
 data/cache/
 data/hirehub.config.json
 *.log
+
+# Segredos e ferramentas locais.
 .env
+.claude/
+.vscode/
+.idea/

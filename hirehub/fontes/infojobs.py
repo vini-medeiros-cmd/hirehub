@@ -7,7 +7,7 @@ sempre para São Paulo. A cobertura é por cidade, e a lista abaixo é uma escol
 editorial (capitais e polos), não um limite técnico: acrescentar municípios é
 acrescentar linhas.
 
-Sendo raspagem, é a fonte mais frágil das quatro — uma reforma de layout no
+Sendo raspagem, é das fontes mais frágeis — uma reforma de layout no
 InfoJobs quebra os padrões daqui, e é para isso que a página /status existe.
 """
 import html

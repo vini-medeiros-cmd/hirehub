@@ -1,4 +1,4 @@
-"""Gupy — a fonte mais generosa das quatro.
+"""Gupy — a fonte mais generosa de todas.
 
 A listagem já devolve `description`, então esta é a única plataforma que não
 precisa de enriquecimento: sai da coleta com a página de detalhes pronta.

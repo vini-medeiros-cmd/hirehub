@@ -1,6 +1,6 @@
 """Normalização de texto: o "N" de coletar → normalizar → armazenar.
 
-As quatro plataformas escrevem a mesma informação de quatro jeitos. Tudo o que
+Cada plataforma escreve a mesma informação de um jeito. Tudo o que
 uniformiza dado bruto mora aqui, para os conectores só traduzirem os campos.
 """
 import hashlib
@@ -50,7 +50,7 @@ def id_da_vaga(link):
 def texto_de_html(bruto, limite=20000):
     """HTML de descrição → texto puro, preservando quebras de parágrafo.
 
-    Guardamos texto, não HTML: as descrições vêm de quatro plataformas
+    Guardamos texto, não HTML: as descrições vêm de várias plataformas
     diferentes, com marcação arbitrária e estilos embutidos. Renderizar isso
     cru na nossa página é convite a HTML quebrado e a XSS.
     """
