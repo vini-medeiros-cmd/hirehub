@@ -109,9 +109,20 @@ def _horas_ate(fonte, cfg, linha):
     return max(0.0, intervalo - passadas - 0.5)
 
 
+def _threads_de(fonte, cfg):
+    """O teto da fonte vale para a coleta também, não só para o enriquecimento.
+
+    Estava só no enriquecimento, e isso fazia a Vagas.com.br — limitada a 2
+    threads justamente por ter respondido 429 — varrer a listagem a 6. O
+    conector pedia cuidado numa etapa e era ignorado na outra.
+    """
+    return min(cfg["threads"], fonte.threads or cfg["threads"])
+
+
 def _coletar_fonte(con, fonte, cfg, carimbo):
     inicio = time.time()
     prefixo = lambda msg: log(f"  {fonte.nome}: {msg}")
+    cfg = {**cfg, "threads": _threads_de(fonte, cfg)}
     try:
         vagas = [v for v in fonte.coletar(cfg, prefixo) if v.get("link") and v.get("titulo")]
         novas = db.salvar(con, vagas, carimbo)
@@ -166,7 +177,7 @@ def _enriquecer(con, fonte, cfg):
             f"(a origem respondeu 429)")
         return 0
 
-    threads = min(cfg["threads"], fonte.threads or cfg["threads"])
+    threads = _threads_de(fonte, cfg)
     log(f"  {fonte.nome}: buscando detalhe de {len(pendentes)} vagas"
         + (f" ({threads} threads)" if threads != cfg["threads"] else ""))
 

@@ -216,6 +216,34 @@ crie `data/hirehub.config.json`:
 }
 ```
 
+### O maior ganho de cobertura está aqui, não em fontes novas
+
+`gupy_termos` é o item mais subestimado do arquivo. A janela geral da Gupy
+alcança as 10.000 vagas mais recentes; **cada termo abre uma janela ADICIONAL
+de 10.000**. Como a maioria dos cargos tem menos que isso no acervo inteiro,
+configurar um termo costuma alcançar *todas* as vagas daquele cargo, inclusive
+as antigas que a janela geral nunca veria. Medido em 08/09/2026:
+
+| Termo | Vagas na Gupy | Requisições |
+|---|---|---|
+| operador | 7.855 | 79 |
+| analista | 7.734 | 78 |
+| auxiliar | 6.585 | 66 |
+| tecnico | 5.383 | 54 |
+| assistente | 4.911 | 50 |
+| desenvolvedor | 616 | 7 |
+| **python** | **32** | 1 |
+
+Repare no contraste: termos genéricos rendem milhares; termos de nicho, dezenas.
+Vale configurar os genéricos pelo volume e os específicos por serem baratos.
+
+**Valide slug de cidade antes de configurar.** O InfoJobs não devolve erro para
+cidade que não reconhece — ele serve São Paulo e segue. Como o conector rotula
+a vaga com a cidade pedida, um slug inválido gravaria vagas paulistas como se
+fossem de outro lugar. `campos-dos-goytacazes` e `campos` fazem exatamente isso.
+O conector confere o título da página e descarta, mas o desperdício de
+requisição continua sendo seu.
+
 `intervalo_por_fonte` dá cadência própria a uma fonte sem precisar de um
 agendador separado: a rodada continua sendo de 6 em 6 horas e a fonte adiada
 simplesmente não participa. A Sólides está em 24h porque hoje devolve zero —

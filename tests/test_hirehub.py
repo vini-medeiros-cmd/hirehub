@@ -504,6 +504,25 @@ class IntervaloPorFonte(unittest.TestCase):
 class InfoJobsPagina(unittest.TestCase):
     """Raspagem é parsing de HTML de terceiro — o lugar mais fácil de errar."""
 
+    def test_cidade_que_cai_para_sao_paulo_e_descartada(self):
+        """O InfoJobs não erra para slug inválido: serve São Paulo calado.
+
+        Como o conector rotula a vaga com a cidade PEDIDA, aceitar essa
+        resposta gravaria vagas paulistas como se fossem de outro lugar.
+        """
+        from hirehub.fontes import infojobs
+
+        pedida = '<html><head><title>Vagas de Emprego em São Paulo | Infojobs</title>'
+        self.assertFalse(infojobs._confere_cidade(pedida, "campos-dos-goytacazes"))
+        self.assertTrue(infojobs._confere_cidade(pedida, "sao-paulo"))
+
+        certa = '<html><head><title>Vagas de Emprego em Cabo Frio - RJ | Infojobs</title>'
+        self.assertTrue(infojobs._confere_cidade(certa, "cabo-frio"))
+        self.assertFalse(infojobs._confere_cidade(certa, "niteroi"))
+
+        # Sem título não dá para julgar: confia no slug em vez de descartar tudo.
+        self.assertTrue(infojobs._confere_cidade("<html><body>vagas</body>", "macae"))
+
     def test_descricao_nao_traz_resto_da_tag_de_abertura(self):
         from hirehub.fontes import infojobs
         from hirehub import net

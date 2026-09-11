@@ -88,10 +88,33 @@ class InfoJobs(Fonte):
         return {"descricao": _limpar(pagina[inicio + 1:inicio + 12001])}
 
 
+_TITULO_PAGINA = re.compile(r"<title>([^<]*)")
+
+
+def _confere_cidade(conteudo, cidade):
+    """A página é mesmo da cidade pedida?
+
+    O InfoJobs NÃO devolve erro para cidade que não reconhece: ele serve São
+    Paulo e segue em frente. Como `_listar` rotula cada vaga com a cidade
+    PEDIDA, e não com a que veio, um slug inválido faria vagas paulistas
+    entrarem na base como se fossem de outro lugar — dado errado, sem nenhum
+    sintoma. Medido com `campos-dos-goytacazes`, que cai para São Paulo.
+
+    O título da página é o que denuncia, e é barato de conferir.
+    """
+    casou = _TITULO_PAGINA.search(conteudo)
+    if not casou:
+        return True  # sem título não dá para julgar; confia no slug
+    titulo = texto.sem_acento(html.unescape(casou.group(1))).lower()
+    return texto.sem_acento(cidade.replace("-", " ")).lower() in titulo
+
+
 def _listar(cidade, uf, remoto, pagina):
     sufixo = "-trabalho-home-office" if remoto else ""
     conteudo = net.html_de(f"{BASE}/empregos-em-{cidade},-{uf}{sufixo}.aspx?Page={pagina}")
     if not conteudo:
+        return []
+    if not _confere_cidade(conteudo, cidade):
         return []
 
     marcas = list(_CARD.finditer(conteudo))
