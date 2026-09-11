@@ -113,19 +113,43 @@ InfoJobs só entregam com uma requisição por vaga.
 
 ### Plataformas avaliadas e descartadas
 
-Registradas para ninguém reinvestigar. Avaliado em 04/09/2026:
+Registro completo das 19 plataformas testadas contra o endpoint real, para
+ninguém reinvestigar. Avaliadas entre 03 e 08/09/2026.
 
-| Plataforma | Motivo |
+**Bloqueadas pela própria plataforma** — decisão delas, não nossa:
+
+| Plataforma | O que responde | Motivo |
+|---|---|---|
+| **Catho** | — | `robots.txt` proíbe `/buscar/vagas/`, a própria busca. A API existe mas só para integradores aprovados, agindo em nome de um usuário cadastrado |
+| **Indeed** | — | `robots.txt` proíbe `/empregos/BR/` e `/emprego/`. A API pública foi descontinuada em 2024 |
+| **Jobbol** | `403` | Cloudflare com desafio de navegador. Nega até o `sitemap_alljobs.xml.gz` que o próprio `robots.txt` autoriza. Passar disso seria burlar proteção anti-bot |
+| **Jooble** | `403` | exige chave de API |
+| **Abler** | `401` | exige autenticação |
+| **Recrutei** | — | API com Bearer Token, e é administrativa do recrutador. Sem mural público por empresa (testados `vagas.`, `carreiras.` e `/vagas`) |
+| **Glassdoor** | — | programa de parceiros fechado para novas inscrições desde 2021 (não chegou a ser testado tecnicamente) |
+
+**Tecnicamente inviáveis** — abertas, mas o formato não permite:
+
+| Plataforma | O que impede |
 |---|---|
-| **Catho** | `robots.txt` proíbe `/buscar/vagas/` — a própria busca de vagas |
-| **Indeed** | `robots.txt` proíbe `/empregos/BR/` e `/emprego/` |
-| **BNE** | 1,7 milhão de vagas, mas renderiza **uma por página**, mesmo na busca por cidade. Coletar exigiria uma requisição por vaga |
+| **BNE** | 1,7 milhão de vagas e JSON-LD com salário no detalhe, mas renderiza **uma vaga por página**, mesmo na busca por cidade. Coletar exigiria uma requisição por vaga |
 | **Trabalha Brasil** | sem JSON-LD e sem API; só raspagem pesada de HTML |
-| **Abler, Quickin** | ATS por empresa, como a InHire — precisariam de lista de tenants própria. Viável, mas é trabalho de descoberta à parte |
-| **Greenhouse, Lever, Ashby, Workable** | ATS globais com API pública limpa, mas por empresa e com pouca adoção no Brasil fora de startups |
-| **Jobbol** | Cloudflare com desafio de navegador: 403 em tudo, inclusive na home e no próprio sitemap que o `robots.txt` autoriza. Passar disso seria burlar proteção anti-bot |
-| **Recrutei** | API exige Bearer Token, e é administrativa do recrutador — não há mural público por empresa (testados `vagas.`, `carreiras.` e `/vagas`) |
-| **Glassdoor** | programa de parceiros fechado para novas inscrições desde 2021 |
+| **Empregos.com.br** | listagem acessível, mas a página de detalhe recusou as requisições |
+| **Programathor** | `406` para cliente HTTP |
+| **Coodesh**, **Remotar**, **99jobs** | `404` nos endpoints prováveis; o modelo da Coodesh é redirecionar o candidato ao site de origem |
+
+**ATS por empresa** — funcionam, mas exigiriam lista de tenants própria, como a
+InHire tem. Viável, é trabalho de descoberta à parte:
+
+| Plataforma | Situação |
+|---|---|
+| **Ashby** | API pública e limpa, confirmada funcionando (142 vagas numa empresa de teste) |
+| **Greenhouse** | API pública, responde por *board token* de cada empresa |
+| **Lever**, **Workable** | API pública por empresa; os endpoints de exemplo testados deram `404` |
+| **Quickin** | `robots.txt` permissivo; não aprofundado |
+
+O peso da adoção no Brasil é o que despriorizou esse grupo: fora de startups,
+pouca empresa brasileira usa Greenhouse, Lever ou Ashby.
 
 Catho e Indeed ficam de fora por decisão delas, não nossa: são as duas maiores
 do país e o `robots.txt` de ambas bloqueia justamente as páginas de vaga.
