@@ -494,7 +494,7 @@ Não desligue o SELinux para contornar. Se algo ainda for bloqueado,
 ### Se a instância for a VM.Standard.E2.1.Micro (1 GB)
 
 Ela não vem com swap, e 1 GB é apertado para Oracle Linux 9 + Nginx + a coleta
-(pico medido de 203 MB). Crie 2 GB de swap para o kernel ter para onde correr:
+(pico medido de 214 MB). Crie 2 GB de swap para o kernel ter para onde correr:
 
 ```bash
 sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
@@ -523,10 +523,18 @@ Vale rodar o backfill de descrições logo em seguida, com
 
 ### Recursos
 
-Medido: pico de **203 MB** de RSS na coleta, ~87 MB de banco com 21 mil vagas.
-Os `MemoryMax` das unidades (768 MB na coleta, 512 MB no site) têm folga
-confortável até no shape x86 de 1 GB. O `VACUUM` ao fim da coleta chega a
-dobrar o arquivo temporariamente — reserve o dobro do banco em disco.
+Medido com a configuração cheia (11 termos na Gupy, 68 mil vagas na base):
+pico de **214 MB** de RSS na coleta e ~260 MB de banco. Os `MemoryMax` das
+unidades (768 MB na coleta, 512 MB no site) têm folga confortável até no shape
+x86 de 1 GB. O `VACUUM` ao fim da coleta chega a dobrar o arquivo
+temporariamente — reserve o dobro do banco em disco.
+
+O pico **não cresce com o acervo**, e isso é deliberado: a coleta grava de
+2.000 em 2.000 em vez de juntar tudo antes. Numa versão anterior, que
+acumulava, os mesmos 43 mil registros da Gupy levaram o pico a **552 MB** — a
+30 MB de estourar o limite da unidade, e perto de um OOM na VPS. Se um dia
+acrescentar muitos termos, é `LOTE_GRAVACAO` que controla o teto, não o
+tamanho da base.
 
 ### Acompanhando
 
