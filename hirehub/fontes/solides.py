@@ -1,13 +1,31 @@
-"""Sólides — a plataforma que publicava salário antes de esvaziar.
+"""Sólides — sem saída, e não por falta de tentar.
 
-ATENÇÃO, medido em 03/09/2026: o endpoint responde 200 com `success: true` e
-`count: 0` para qualquer combinação de take/page/search. Ele não quebrou, ele
-esvaziou. Não é limite de taxa (a resposta é imediata e consistente) nem falta
-de cabeçalho (testado com Origin e Referer do próprio portal).
+DIAGNÓSTICO FINAL, 08/09/2026. O endpoint abaixo responde 200 com
+`success: true` e `count: 0` para qualquer combinação de take/page/search. Não
+é limite de taxa nem falta de cabeçalho (testado com Origin e Referer do
+próprio portal): **o portal foi reescrito em Next.js e esta API saiu do ar
+junto com a versão antiga do site.**
 
-O conector fica no ar de propósito: a página /status mostra "sem retorno" em
-vez de esconder o problema, e no dia em que a API voltar a responder, a coleta
-volta sozinha. Enquanto isso, as outras três seguram o catálogo.
+O que existe hoje, e por que nada disso serve:
+
+  * O catálogo continua lá — 73.031 vagas em `/vagas/todas`, com título,
+    empresa, local, salário e descrição completa visíveis na página.
+  * Mas a listagem é montada por JavaScript: buscando por HTTP puro vem 1 card;
+    no navegador, 12. Raspar exigiria navegador headless, e o projeto inteiro
+    se sustenta em não ter dependências.
+  * E isso nem seria o pior. **Não há link para a vaga individual.** O título
+    não é link, o card não é clicável, e o único destino do card é a raiz do
+    mural da empresa (`{slug}.vagas.solides.com.br`) — que também é renderizado
+    por JavaScript e não expõe as vagas no HTML.
+
+Ou seja: mesmo pagando o preço de um navegador headless, o botão
+"Candidatar-se" não teria para onde apontar além da página inicial da empresa.
+Isso quebra a regra que vale para todas as fontes — link não confiável não
+entra. Ver `_link()` abaixo, que já aplicava o mesmo critério.
+
+O conector fica no ar porque a /status dizendo "Sem retorno" é informação
+honesta, e porque no dia em que a Sólides publicar uma API nova a volta custa
+trocar uma URL. Não porque haja esperança de consertar a atual.
 
 Limites conhecidos de quando ela respondia, mantidos porque voltarão a valer:
 

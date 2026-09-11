@@ -123,20 +123,39 @@ Registradas para ninguém reinvestigar. Avaliado em 04/09/2026:
 | **Trabalha Brasil** | sem JSON-LD e sem API; só raspagem pesada de HTML |
 | **Abler, Quickin** | ATS por empresa, como a InHire — precisariam de lista de tenants própria. Viável, mas é trabalho de descoberta à parte |
 | **Greenhouse, Lever, Ashby, Workable** | ATS globais com API pública limpa, mas por empresa e com pouca adoção no Brasil fora de startups |
+| **Jobbol** | Cloudflare com desafio de navegador: 403 em tudo, inclusive na home e no próprio sitemap que o `robots.txt` autoriza. Passar disso seria burlar proteção anti-bot |
+| **Recrutei** | API exige Bearer Token, e é administrativa do recrutador — não há mural público por empresa (testados `vagas.`, `carreiras.` e `/vagas`) |
+| **Glassdoor** | programa de parceiros fechado para novas inscrições desde 2021 |
 
 Catho e Indeed ficam de fora por decisão delas, não nossa: são as duas maiores
 do país e o `robots.txt` de ambas bloqueia justamente as páginas de vaga.
 
-### Sólides: sem retorno desde 03/09/2026
+### Sólides: sem saída, investigado até o fim
 
 O endpoint responde `200` com `success: true` e `count: 0` para qualquer
 combinação de `take`, `page` e `search`. Não é limite de taxa nem falta de
-cabeçalho — foi testado com `Origin` e `Referer` do próprio portal. A API não
-quebrou, ela esvaziou.
+cabeçalho — testado com `Origin` e `Referer` do próprio portal. **O portal foi
+reescrito em Next.js e a API antiga saiu do ar junto com o site antigo.**
 
-O conector segue no ar de propósito: `/status` mostra **Sem retorno** em vez de
-esconder o problema, e no dia em que a API voltar, a coleta volta sozinha. Era
-a única fonte que publicava salário.
+O catálogo continua existindo: 73.031 vagas em `/vagas/todas`, com salário e
+descrição completa visíveis na página. Duas coisas impedem aproveitá-lo:
+
+1. **A listagem é montada por JavaScript.** Por HTTP puro vem 1 card; no
+   navegador, 12. Raspar exigiria navegador headless — e o projeto inteiro se
+   sustenta em não ter dependências.
+2. **Não existe link para a vaga individual.** O título não é link, o card não
+   é clicável, e o único destino é a raiz do mural da empresa, que também é
+   renderizado por JavaScript.
+
+O segundo ponto é o que encerra a discussão: mesmo pagando o preço de um
+navegador headless, o botão *Candidatar-se* não teria para onde apontar além da
+página inicial da empresa. Link não confiável não entra, e essa regra vale para
+todas as fontes.
+
+O conector fica no ar porque `/status` dizendo **Sem retorno** é informação
+honesta, e porque no dia em que houver uma API nova a volta custa trocar uma
+URL. Era a única fonte que publicava salário — hoje a Trampos.co cobre parte
+disso.
 
 ### Atualizando a lista de empresas da InHire
 
