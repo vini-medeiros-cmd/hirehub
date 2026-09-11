@@ -61,14 +61,20 @@ uma fonte é criar um arquivo lá e decorar a classe com `@registrar` — o núc
 não muda, porque a descoberta varre o pacote em vez de consultar uma lista
 escrita à mão.
 
-| Fonte | Cobertura | Descrição da vaga | Observação |
-|---|---|---|---|
-| **Gupy** | 10.000 mais recentes | vem na listagem | teto de paginação da API (`offset + limit ≤ 10.000`) |
-| **InHire** | completa (~8.900) | 1 requisição por vaga | exige `data/inhire-tenants.json`; não tem busca global |
-| **InfoJobs** | por cidade | 1 requisição por vaga | HTML raspado, sem API |
-| **Vagas.com.br** | por cidade | 1 requisição por vaga | listagem raspada; detalhe em JSON-LD |
-| **Trampos.co** | ~230 vagas | 1 requisição por vaga | API pública sem token; áreas criativas e digitais |
-| **Sólides** | estatística | vem na listagem | **hoje devolve zero** — ver abaixo |
+Números de uma instalação real, com a configuração de exemplo (11 termos na
+Gupy, 25 cidades no InfoJobs):
+
+| Fonte | Vagas | Cobertura | Descrição | Observação |
+|---|---|---|---|---|
+| **Gupy** | ~43.000 | janela de 10.000 **por termo** | vem na listagem | sem termos configurados seriam só 10.000; ver *Configuração* |
+| **InHire** | ~9.000 | completa | 1 requisição por vaga | exige `data/inhire-tenants.json`; não tem busca global |
+| **InfoJobs** | ~1.700 | por cidade | 1 requisição por vaga | HTML raspado, sem API |
+| **Vagas.com.br** | ~1.000 | por cidade | 1 requisição por vaga | listagem raspada, detalhe em JSON-LD; atrás de Cloudflare |
+| **Trampos.co** | ~250 | quase completa | 1 requisição por vaga | API pública sem token; áreas criativas e digitais |
+| **Sólides** | 0 | — | — | **sem retorno** — ver abaixo |
+
+O total no ar fica em torno de **65 mil vagas**, e a base acumula: vagas que
+saem da janela de uma fonte continuam listadas até `esquecer_apos_dias`.
 
 Só a **InHire** declara `cobertura_completa`. As demais entregam uma janela, e
 por isso não marcam vaga como "saiu do ar" — ausência ali significa que
@@ -89,12 +95,21 @@ A listagem nacional (`/vagas-de-emprego`) é uma seleção curada de ~120 vagas;
 catálogo real só é alcançável por cidade. Medido: São Paulo tem 992 vagas
 alcançáveis, 40 por página, paginação até o fim sem repetir.
 
-**Ela está atrás de Cloudflare e não avisa antes de bloquear.** 968 páginas de
-detalhe a 8 threads renderam um `429` com `Retry-After` de **24 horas**. Por
-isso o conector declara tetos próprios (`threads = 2`,
-`detalhes_por_execucao = 120`), calibrados para o enriquecimento ocupar cerca
-de um minuto de tráfego a cada 6 horas: o acervo converge em alguns dias sem
-incomodar a origem. Não suba esses números sem medir.
+**Ela está atrás de Cloudflare e não avisa antes de bloquear.** Foram dois
+`429` com `Retry-After` de 24 horas até os limites certos aparecerem:
+
+1. 968 páginas de detalhe a 8 threads. Reduzido para 2 threads e 120 detalhes.
+2. Bloqueou de novo. **Limitar thread não limita taxa** — duas threads sem
+   pausa ainda disparam várias requisições por segundo, e é por intervalo de
+   tempo que um Cloudflare conta.
+
+Daí `req_por_segundo = 1`, implementado com relógio compartilhado entre as
+threads (`net.Ritmo`): o espaçamento vale para o conjunto, não por thread.
+
+O segundo bloqueio ensinou outra coisa: **listagem e detalhe disputam o mesmo
+orçamento**. Ampliar as cidades desta fonte reduziu o enriquecimento, e como a
+data dela só vem do detalhe, o resultado foram 2.102 vagas sem data afundando
+na ordenação. Por isso ela fica em 12 cidades enquanto o InfoJobs vai a 25.
 
 Os tetos da fonte são limites, nunca permissões — se a configuração global for
 mais apertada, vale a global.
