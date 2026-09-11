@@ -196,11 +196,13 @@ $(passo "Pronto")
   Site local:  $(curl -fsS -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/ || echo 'sem resposta') em http://127.0.0.1:8080
   Site externo: http://${IP}
 
-  FALTA VOCÊ FAZER, no console da Oracle:
-    Networking > VCN > Security Lists > Ingress Rules
-    libere TCP 80 e 443 para 0.0.0.0/0
+  SE NÃO ABRIR DE FORA — e só nesse caso — falta liberar as portas no console
+  da Oracle. O script não tem como fazer isso nem como conferir daqui dentro:
 
-  Se o site não abrir de fora mas responder em 127.0.0.1, é isso.
+    Networking > VCN > Security Lists > Ingress Rules
+    TCP 80 e 443 para 0.0.0.0/0
+
+  O sintoma é específico: responde em 127.0.0.1 e dá timeout pelo IP público.
 
   Depois, com o domínio já apontando para ${IP}:
     sudo dnf install -y epel-release && sudo dnf install -y certbot python3-certbot-nginx
