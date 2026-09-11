@@ -120,8 +120,18 @@ elif [[ -d "$DESTINO/.git" ]]; then
   git -C "$DESTINO" fetch --quiet origin
   git -C "$DESTINO" reset --hard --quiet origin/HEAD
 else
+  # Aqui cai tanto a instalação nova (destino não existe) quanto a que veio de
+  # um `scp` e por isso NÃO é um checkout git. O `git clone` direto no destino
+  # falha no segundo caso — "already exists and is not an empty directory" —, e
+  # foi assim que a primeira atualização real quebrou.
+  #
+  # Clonar num temporário e copiar por cima resolve os dois, preserva o banco
+  # (que não vem no tar) e deixa o destino sendo um checkout de verdade, para a
+  # próxima atualização ser um `git fetch` barato.
   echo "  clonando de $REPO"
-  git clone --quiet "$REPO" "$DESTINO" || {
+  TEMP="$(mktemp -d)"
+  trap 'rm -rf "$TEMP"' EXIT
+  git clone --quiet "$REPO" "$TEMP/repo" || {
     echo >&2 "
   Não consegui clonar $REPO.
 
@@ -138,6 +148,12 @@ else
 "
     exit 1
   }
+  mkdir -p "$DESTINO"
+  # O .git VAI junto, ao contrário da cópia local: é o que transforma o destino
+  # num checkout e barateia as próximas atualizações.
+  tar -C "$TEMP/repo" --exclude=__pycache__ \
+      --exclude='data/*.db' --exclude='data/*.db-wal' --exclude='data/*.db-shm' \
+      --exclude='data/cache' -cf - . | tar -C "$DESTINO" -xf -
 fi
 chown -R "$USUARIO:$USUARIO" "$DESTINO"
 # O Nginx roda como outro usuário e lê /static direto do disco.
