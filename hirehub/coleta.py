@@ -119,20 +119,43 @@ def _threads_de(fonte, cfg):
     return min(cfg["threads"], fonte.threads or cfg["threads"])
 
 
+# Vagas acumuladas em memória antes de ir para o banco.
+#
+# Existe porque a memória virou o limite real: com `gupy_termos` configurado, a
+# Gupy passou de 10.000 para 43.000 vagas e o pico da coleta foi de 203 MB para
+# mais de 540 — perto demais do `MemoryMax` de 768 MB da unidade systemd, e de
+# um OOM na VPS de 945 MB. Gravar de 2.000 em 2.000 desliga o crescimento: o
+# pico passa a depender do lote, não do tamanho do acervo.
+LOTE_GRAVACAO = 2000
+
+
 def _coletar_fonte(con, fonte, cfg, carimbo):
     inicio = time.time()
     prefixo = lambda msg: log(f"  {fonte.nome}: {msg}")
     cfg = {**cfg, "threads": _threads_de(fonte, cfg)}
     try:
-        vagas = [v for v in fonte.coletar(cfg, prefixo) if v.get("link") and v.get("titulo")]
-        novas = db.salvar(con, vagas, carimbo)
+        # `coletar` pode devolver lista ou gerador. Consumir em lotes funciona
+        # para os dois, e só quem devolve gerador colhe o ganho de memória.
+        total, novas, lote = 0, 0, []
+        for vaga in fonte.coletar(cfg, prefixo):
+            if not (vaga.get("link") and vaga.get("titulo")):
+                continue
+            lote.append(vaga)
+            if len(lote) >= LOTE_GRAVACAO:
+                novas += db.salvar(con, lote, carimbo)
+                total += len(lote)
+                lote = []
+        if lote:
+            novas += db.salvar(con, lote, carimbo)
+            total += len(lote)
+
         duracao = time.time() - inicio
         db.anotar_fonte(
             con, fonte.id, fonte.nome, ultima_coleta=carimbo, ultimo_ok=carimbo,
-            vagas=len(vagas), novas=novas, duracao=duracao, erro=None,
+            vagas=total, novas=novas, duracao=duracao, erro=None,
             cobertura_completa=int(fonte.cobertura_completa),
         )
-        log(f"  {fonte.nome}: {len(vagas)} vagas ({novas} novas) em {duracao:.0f}s")
+        log(f"  {fonte.nome}: {total} vagas ({novas} novas) em {duracao:.0f}s")
         return novas
     except BrokenPipeError:
         # Nunca é culpa da fonte: é a saída do processo que sumiu. Registrar

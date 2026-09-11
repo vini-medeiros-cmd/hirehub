@@ -377,6 +377,64 @@ class Enriquecimento(unittest.TestCase):
             min(apertado["detalhes_por_execucao"], vagas.detalhes_por_execucao), 10)
 
 
+class ColetaEmLotes(unittest.TestCase):
+    """Fonte grande não pode caber toda na memória antes de ir para o banco.
+
+    Com `gupy_termos` configurado a Gupy passou de 10.000 para 43.000 vagas
+    COM descrição, e o pico da coleta foi de 203 MB para 540 — perto demais do
+    MemoryMax de 768 MB da unidade e de um OOM na VPS de 945 MB.
+    """
+
+    def setUp(self):
+        from hirehub import coleta
+        self.coleta = coleta
+        config.BANCO.unlink(missing_ok=True)
+        self.con = db.abrir()
+        self.fonte = fontes.por_id("gupy")
+        self.original = self.fonte.__class__.coletar
+        self.cfg = {**config.PADROES, "threads": 1}
+
+    def tearDown(self):
+        self.fonte.__class__.coletar = self.original
+        self.con.close()
+
+    def test_gerador_e_gravado_em_lotes_sem_materializar_tudo(self):
+        quantas = self.coleta.LOTE_GRAVACAO * 2 + 7
+        vivas = {"max": 0}
+
+        def muitas(cfg, log):
+            # Conta quantas vagas o orquestrador segura ao mesmo tempo: se ele
+            # acumulasse tudo, este número chegaria a `quantas`.
+            for i in range(quantas):
+                vivas["max"] = max(vivas["max"], i % self.coleta.LOTE_GRAVACAO + 1)
+                yield _vaga(link=f"https://x/{i}", fonte="gupy")
+
+        self.fonte.__class__.coletar = staticmethod(muitas)
+        novas = self.coleta._coletar_fonte(self.con, self.fonte, self.cfg, "c1")
+
+        self.assertEqual(novas, quantas)
+        self.assertEqual(db.contagens(self.con)["total"], quantas)
+        self.assertLessEqual(vivas["max"], self.coleta.LOTE_GRAVACAO)
+
+    def test_lista_continua_funcionando(self):
+        """Conectores que ainda devolvem lista não podem quebrar."""
+        self.fonte.__class__.coletar = staticmethod(lambda cfg, log: [
+            _vaga(link="https://x/1", fonte="gupy"),
+            _vaga(link="https://x/2", fonte="gupy"),
+        ])
+        self.assertEqual(
+            self.coleta._coletar_fonte(self.con, self.fonte, self.cfg, "c1"), 2)
+
+    def test_vaga_sem_link_ou_titulo_e_descartada_no_meio_do_fluxo(self):
+        self.fonte.__class__.coletar = staticmethod(lambda cfg, log: iter([
+            _vaga(link="https://x/1", fonte="gupy"),
+            _vaga(link="", fonte="gupy"),
+            _vaga(link="https://x/3", titulo="", fonte="gupy"),
+        ]))
+        self.assertEqual(
+            self.coleta._coletar_fonte(self.con, self.fonte, self.cfg, "c1"), 1)
+
+
 class LogResiliente(unittest.TestCase):
     """Saída padrão morta não pode virar "falha da plataforma" no /status.
 

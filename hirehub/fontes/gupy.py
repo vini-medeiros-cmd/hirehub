@@ -24,15 +24,25 @@ class Gupy(Fonte):
     site = "https://portal.gupy.io"
 
     def coletar(self, cfg, log):
-        vistas, vagas = set(), []
+        # Gerador, não lista: com 11 termos configurados esta fonte passa de
+        # 43.000 vagas COM descrição, e juntá-las antes de gravar levava o pico
+        # de memória a mais de 540 MB — inviável na VPS de 945 MB. Entregando
+        # janela por janela, o orquestrador grava em lotes e o pico fica no
+        # tamanho de uma janela, não do acervo.
+        #
+        # `vistas` guarda só os links, não as vagas: são alguns MB de texto
+        # contra centenas de dicionários com descrição.
+        vistas = set()
         for termo in [None, *cfg["gupy_termos"]]:
-            lote = self._janela(termo, cfg["threads"])
-            novas = [v for v in lote if v["link"] not in vistas]
-            vistas.update(v["link"] for v in novas)
-            vagas += novas
+            novas = 0
+            for vaga in self._janela(termo, cfg["threads"]):
+                if vaga["link"] in vistas:
+                    continue
+                vistas.add(vaga["link"])
+                novas += 1
+                yield vaga
             if termo:
-                log(f"termo '{termo}': +{len(novas)} vagas")
-        return vagas
+                log(f"termo '{termo}': +{novas} vagas")
 
     def _janela(self, termo, threads):
         total = min(self._total(termo), MAX_OFFSET)

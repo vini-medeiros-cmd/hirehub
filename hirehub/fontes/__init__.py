@@ -22,6 +22,11 @@ class Fonte:
     Só `link` e `titulo` são realmente obrigatórios; o resto pode vir vazio,
     porque nem toda plataforma publica tudo.
 
+    Pode devolver lista OU gerador. Gerador é preferível em fonte grande: o
+    orquestrador grava em lotes conforme consome, e o pico de memória passa a
+    depender do lote em vez do tamanho do acervo. A Gupy virou geradora quando
+    passou de 43.000 vagas com descrição e o pico chegou a 540 MB.
+
     `detalhar` é opcional. Existe para as fontes cuja listagem não traz tudo e
     é preciso uma requisição por vaga para completar. Recebe {id, link} e
     devolve os campos a atualizar (descricao, publicada_em, salario, local,
