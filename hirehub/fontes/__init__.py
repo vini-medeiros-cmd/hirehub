@@ -60,6 +60,15 @@ class Fonte:
     threads = None
     detalhes_por_execucao = None
 
+    # Requisições por segundo, somando todas as threads. None = sem limite.
+    #
+    # É diferente de `threads`, e a diferença custou dois bloqueios: a
+    # Vagas.com.br levou 429 mesmo a 2 threads, porque duas threads sem pausa
+    # ainda disparam várias requisições por segundo. Um Cloudflare conta
+    # requisições por intervalo de tempo — é a taxa que precisa ser contida, e
+    # limitar thread só reduz o paralelismo, não o ritmo.
+    req_por_segundo = None
+
     def coletar(self, cfg, log):
         raise NotImplementedError
 

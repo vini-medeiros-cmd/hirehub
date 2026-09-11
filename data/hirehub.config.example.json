@@ -116,7 +116,7 @@
       "sp"
     ]
   ],
-  "vagas_paginas_por_cidade": 8,
+  "vagas_paginas_por_cidade": 5,
   "vagas_cidades": [
     "sao-paulo",
     "rio-de-janeiro",
@@ -129,19 +129,7 @@
     "fortaleza",
     "campinas",
     "macae",
-    "rio-das-ostras",
-    "cabo-frio",
-    "niteroi",
-    "vitoria",
-    "manaus",
-    "goiania",
-    "belem",
-    "florianopolis",
-    "natal",
-    "joinville",
-    "londrina",
-    "santos",
-    "sorocaba"
+    "rio-das-ostras"
   ],
   "trampos_paginas": 30,
   "detalhes_por_execucao": 400,

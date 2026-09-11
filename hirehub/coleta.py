@@ -132,7 +132,10 @@ LOTE_GRAVACAO = 2000
 def _coletar_fonte(con, fonte, cfg, carimbo):
     inicio = time.time()
     prefixo = lambda msg: log(f"  {fonte.nome}: {msg}")
-    cfg = {**cfg, "threads": _threads_de(fonte, cfg)}
+    # O ritmo acompanha a fonte pelo cfg: o conector repassa para em_paralelo
+    # sem precisar conhecer o orquestrador.
+    cfg = {**cfg, "threads": _threads_de(fonte, cfg),
+           "ritmo": net.Ritmo(fonte.req_por_segundo)}
     try:
         # `coletar` pode devolver lista ou gerador. Consumir em lotes funciona
         # para os dois, e só quem devolve gerador colhe o ganho de memória.
@@ -208,7 +211,8 @@ def _enriquecer(con, fonte, cfg):
     for inicio in range(0, len(pendentes), LOTE_DETALHES):
         lote = pendentes[inicio:inicio + LOTE_DETALHES]
         resultados = net.em_paralelo(
-            lambda v: (v["id"], fonte.detalhar(v)), lote, threads)
+            lambda v: (v["id"], fonte.detalhar(v)), lote, threads,
+            ritmo=net.Ritmo(fonte.req_por_segundo))
 
         # A distinção que dá sentido ao contrato de `detalhar`:
         #   dict  = "busquei; isto é o que existe" (pode ser descrição vazia)

@@ -51,13 +51,26 @@ class Vagas(Fonte):
     site = BASE
     cobertura_completa = False
 
-    # Está atrás de Cloudflare, e ela não avisa antes: 968 páginas de detalhe a
-    # 8 threads renderam um 429 com Retry-After de 24 horas. Estes dois números
-    # foram escolhidos para o enriquecimento ocupar cerca de um minuto de
-    # tráfego a cada 6 horas — o acervo converge em alguns dias, sem incomodar
-    # a origem. Não suba sem medir.
+    # Cloudflare, e o que ela mede é TAXA — não paralelismo. Isso custou dois
+    # bloqueios de 24h para ficar claro:
+    #
+    #   1º) 968 detalhes a 8 threads. Reduzi para 2 threads e 120 detalhes.
+    #   2º) mesmo assim. A listagem tinha crescido para 192 requisições, e ela
+    #       sozinha já gastava o orçamento: sobraram 16 detalhes antes do 429.
+    #
+    # Limitar thread não conteve porque 2 threads sem pausa ainda disparam
+    # várias requisições por segundo. `req_por_segundo` é o que realmente
+    # importa aqui — uma por segundo, somando listagem e detalhe.
+    #
+    # E o segundo bloqueio ensinou outra coisa: nesta fonte, listagem e detalhe
+    # disputam o MESMO orçamento. Ampliar a listagem aqui reduz o
+    # enriquecimento, e como a data desta fonte só vem do detalhe, vagas sem
+    # detalhe entram sem data e afundam na ordenação. Mais vagas piores não é
+    # ganho — por isso as cidades dela ficam nas 12 originais, enquanto o
+    # InfoJobs (que não reclama) foi para 25.
     threads = 2
     detalhes_por_execucao = 120
+    req_por_segundo = 1
 
     def coletar(self, cfg, log):
         paginas = int(cfg.get("vagas_paginas_por_cidade") or 0)
@@ -67,7 +80,8 @@ class Vagas(Fonte):
         tarefas = [(c, p) for c in cidades for p in range(1, paginas + 1)]
         log(f"{paginas} páginas x {len(cidades)} cidades")
 
-        lotes = net.em_paralelo(lambda t: _listar(*t), tarefas, cfg["threads"])
+        lotes = net.em_paralelo(lambda t: _listar(*t), tarefas, cfg["threads"],
+                                ritmo=cfg.get("ritmo"))
         vistos, vagas = set(), []
         for lote in lotes:
             for vaga in lote or []:

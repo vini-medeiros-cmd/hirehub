@@ -60,7 +60,8 @@ class InfoJobs(Fonte):
             for p in range(1, paginas + 1)
         ]
         log(f"{paginas} páginas x {len(cidades)} cidades x 2 modalidades")
-        lotes = net.em_paralelo(lambda t: _listar(*t), tarefas, cfg["threads"])
+        lotes = net.em_paralelo(lambda t: _listar(*t), tarefas, cfg["threads"],
+                                ritmo=cfg.get("ritmo"))
         vistos, vagas = set(), []
         for lote in lotes:
             for vaga in lote or []:

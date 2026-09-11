@@ -35,7 +35,7 @@ class Gupy(Fonte):
         vistas = set()
         for termo in [None, *cfg["gupy_termos"]]:
             novas = 0
-            for vaga in self._janela(termo, cfg["threads"]):
+            for vaga in self._janela(termo, cfg["threads"], cfg.get("ritmo")):
                 if vaga["link"] in vistas:
                     continue
                 vistas.add(vaga["link"])
@@ -44,7 +44,7 @@ class Gupy(Fonte):
             if termo:
                 log(f"termo '{termo}': +{novas} vagas")
 
-    def _janela(self, termo, threads):
+    def _janela(self, termo, threads, ritmo=None):
         total = min(self._total(termo), MAX_OFFSET)
         if total <= 0:
             return []
@@ -56,7 +56,7 @@ class Gupy(Fonte):
             url = net.url_com(API, limit=limite, offset=offset, jobName=termo)
             return (net.json_de(url) or {}).get("data") or []
 
-        paginas = net.em_paralelo(pagina, pedidos, threads)
+        paginas = net.em_paralelo(pagina, pedidos, threads, ritmo=ritmo)
         return [
             v for bruta in (i for p in paginas if p for i in p)
             if (v := self._traduzir(bruta))

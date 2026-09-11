@@ -5,6 +5,7 @@ vez de levantar exceção. Uma página quebrada não pode derrubar a varredura
 inteira de uma fonte, muito menos a coleta das outras.
 """
 import json
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -98,11 +99,42 @@ def url_com(base, **params):
     return f"{base}?{urllib.parse.urlencode(limpos)}"
 
 
-def em_paralelo(funcao, itens, threads):
-    """map paralelo com uma garantia a mais: um item que explode vira None em vez
-    de matar o lote inteiro. Um tenant fora do ar não pode custar os outros 8.700."""
+class Ritmo:
+    """Espaça as requisições no tempo, entre todas as threads.
+
+    Limitar threads não é a mesma coisa que limitar taxa, e essa diferença
+    custou dois bloqueios: a Vagas.com.br levou 429 mesmo com 2 threads, porque
+    2 threads sem pausa ainda disparam várias requisições por segundo. Um
+    Cloudflare conta requisições por intervalo — é isso que precisa ser contido.
+
+    O relógio é compartilhado e protegido por lock: o espaçamento vale para o
+    conjunto das threads, não para cada uma isoladamente.
+    """
+
+    def __init__(self, por_segundo):
+        self.intervalo = 1.0 / por_segundo if por_segundo else 0.0
+        self._lock = threading.Lock()
+        self._proxima = 0.0
+
+    def esperar(self):
+        if not self.intervalo:
+            return
+        with self._lock:
+            agora = time.monotonic()
+            espera = max(0.0, self._proxima - agora)
+            self._proxima = max(agora, self._proxima) + self.intervalo
+        if espera:
+            time.sleep(espera)
+
+
+def em_paralelo(funcao, itens, threads, ritmo=None):
+    """map paralelo com duas garantias: um item que explode vira None em vez de
+    matar o lote inteiro (um tenant fora do ar não pode custar os outros 8.700),
+    e, se houver `ritmo`, as requisições saem espaçadas no tempo."""
     def protegida(item):
         try:
+            if ritmo:
+                ritmo.esperar()
             return funcao(item)
         except Exception:
             return None

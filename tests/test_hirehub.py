@@ -377,6 +377,45 @@ class Enriquecimento(unittest.TestCase):
             min(apertado["detalhes_por_execucao"], vagas.detalhes_por_execucao), 10)
 
 
+class LimiteDeTaxa(unittest.TestCase):
+    """Limitar thread não é limitar taxa, e a Vagas.com.br cobrou a diferença.
+
+    Ela levou 429 mesmo a 2 threads: duas threads sem pausa ainda disparam
+    várias requisições por segundo, e um Cloudflare conta requisições por
+    intervalo de tempo.
+    """
+
+    def test_ritmo_espaca_entre_todas_as_threads(self):
+        import time
+
+        from hirehub import net
+        ritmo = net.Ritmo(10)  # uma a cada 100ms
+        inicio = time.monotonic()
+        saida = net.em_paralelo(lambda i: i * 2, range(8), threads=4, ritmo=ritmo)
+        levou = time.monotonic() - inicio
+
+        self.assertEqual(saida, [i * 2 for i in range(8)])
+        # 8 requisições a 10/s = 7 intervalos = ~0,7s. Se o espaçamento valesse
+        # por thread em vez de para o conjunto, seriam ~0,2s.
+        self.assertGreater(levou, 0.55, "o ritmo não está sendo respeitado")
+        self.assertLess(levou, 1.5, "está mais lento do que o configurado")
+
+    def test_sem_ritmo_nao_atrasa_nada(self):
+        import time
+
+        from hirehub import net
+        inicio = time.monotonic()
+        net.em_paralelo(lambda i: i, range(20), threads=4, ritmo=None)
+        self.assertLess(time.monotonic() - inicio, 0.3)
+
+    def test_fonte_bloqueada_declara_o_proprio_ritmo(self):
+        """A Vagas.com.br é a que apanhou; ela precisa declarar o limite."""
+        vagas = fontes.por_id("vagas")
+        self.assertEqual(vagas.req_por_segundo, 1)
+        # As que nunca reclamaram seguem sem limite, para não ficarem lentas à toa.
+        self.assertIsNone(fontes.por_id("gupy").req_por_segundo)
+
+
 class ColetaEmLotes(unittest.TestCase):
     """Fonte grande não pode caber toda na memória antes de ir para o banco.
 
