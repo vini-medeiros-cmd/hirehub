@@ -163,8 +163,10 @@ passo "Serviços systemd"
 install -m 644 "$DESTINO"/deploy/hirehub-web.service /etc/systemd/system/
 install -m 644 "$DESTINO"/deploy/hirehub-coleta.service /etc/systemd/system/
 install -m 644 "$DESTINO"/deploy/hirehub-coleta.timer /etc/systemd/system/
+install -m 644 "$DESTINO"/deploy/hirehub-backup.service /etc/systemd/system/
+install -m 644 "$DESTINO"/deploy/hirehub-backup.timer /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now hirehub-web.service hirehub-coleta.timer
+systemctl enable --now hirehub-web.service hirehub-coleta.timer hirehub-backup.timer
 
 passo "Nginx"
 install -m 644 "$DESTINO"/deploy/nginx.conf /etc/nginx/conf.d/hirehub.conf

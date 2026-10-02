@@ -1,0 +1,31 @@
+# Cópia consistente do banco. Disparado pelo hirehub-backup.timer.
+#
+# Existe porque a base acumula até 120 dias de histórico que as plataformas NÃO
+# oferecem — a Gupy só devolve as 10.000 vagas mais recentes. Perder o arquivo é
+# perder dado que nenhuma coleta futura traz de volta.
+#
+# E numa instância Always Free da Oracle isso não é hipótese remota: a cota é
+# mantida enquanto a conta é usada ativamente, e instância ociosa pode ser
+# recuperada.
+
+[Unit]
+Description=HireHub — backup do banco
+After=hirehub-coleta.service
+
+[Service]
+Type=oneshot
+User=hirehub
+Group=hirehub
+WorkingDirectory=/opt/hirehub
+ExecStart=/usr/bin/python3 /opt/hirehub/bin/backup.py
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/hirehub/data
+# O VACUUM INTO lê o banco inteiro, mas não o carrega todo na memória.
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

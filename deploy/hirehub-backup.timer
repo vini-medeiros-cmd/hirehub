@@ -1,0 +1,17 @@
+# Backup diário, às 03:00 — fora das janelas de coleta (00, 06, 12, 18).
+#
+# Não faz sentido copiar mais de uma vez por dia: o banco muda devagar e cada
+# cópia custa 260 MB de disco. Sete cópias cobrem uma semana, que é tempo de
+# sobra para perceber que algo deu errado.
+
+[Unit]
+Description=HireHub — backup diário do banco
+
+[Timer]
+OnCalendar=03:00
+Persistent=true
+RandomizedDelaySec=10min
+Unit=hirehub-backup.service
+
+[Install]
+WantedBy=timers.target

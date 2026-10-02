@@ -551,6 +551,36 @@ acumulava, os mesmos 43 mil registros da Gupy levaram o pico a **552 MB** — a
 acrescentar muitos termos, é `LOTE_GRAVACAO` que controla o teto, não o
 tamanho da base.
 
+### Backup
+
+A base acumula até `esquecer_apos_dias` (120) de histórico que as plataformas
+**não** oferecem — a Gupy só devolve as 10.000 vagas mais recentes. Perder o
+arquivo é perder dado que nenhuma coleta futura traz de volta.
+
+O `hirehub-backup.timer` roda diariamente às 03:00 e guarda as 7 cópias mais
+recentes em `data/backups/` (~1,8 GB no total).
+
+```bash
+sudo -u hirehub python3 /opt/hirehub/bin/backup.py   # avulso, agora
+systemctl list-timers hirehub-backup.timer
+```
+
+Usa `VACUUM INTO`, não `cp`: o banco está em WAL e a coleta pode estar
+escrevendo. Copiar o arquivo no meio disso gera uma cópia corrompida — que só
+se descobre no dia em que ela é necessária.
+
+**Cópia no servidor não é backup.** Se a instância morrer, as 7 vão junto.
+Puxe para a sua máquina de vez em quando:
+
+```bash
+rsync -avz --progress -e "ssh -i SUA_CHAVE" \
+  opc@SEU_IP:/opt/hirehub/data/backups/ ~/hirehub-backups/
+```
+
+Numa instância *Always Free* da Oracle isso não é zelo excessivo: a cota é
+mantida enquanto a conta é usada ativamente, e instância ociosa pode ser
+recuperada. O HireHub fica parado 5h50 de cada 6 horas.
+
 ### Acompanhando
 
 ```bash
