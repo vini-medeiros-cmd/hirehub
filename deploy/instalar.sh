@@ -117,8 +117,16 @@ if [[ -n "$ORIGEM" && -f "$ORIGEM/bin/coletar.py" && "$ORIGEM" != "$DESTINO" ]];
       --exclude='data/cache' -cf - . | tar -C "$DESTINO" -xf -
 elif [[ -d "$DESTINO/.git" ]]; then
   echo "  atualizando do GitHub"
-  git -C "$DESTINO" fetch --quiet origin
-  git -C "$DESTINO" reset --hard --quiet origin/HEAD
+  # `-c safe.directory`: o script roda como root, mas o repositório pertence ao
+  # usuário hirehub (o chown no fim deste bloco faz isso). O git se recusa a
+  # operar num repositório de outro dono — "detected dubious ownership" — e é
+  # uma proteção legítima, não um estorvo a desligar.
+  #
+  # Por isso a exceção é por COMANDO, e não `git config --global`: ela vale só
+  # aqui, para este caminho, em vez de marcar o diretório como confiável para
+  # todo comando git que o root rodar na máquina.
+  git -c safe.directory="$DESTINO" -C "$DESTINO" fetch --quiet origin
+  git -c safe.directory="$DESTINO" -C "$DESTINO" reset --hard --quiet origin/HEAD
 else
   # Aqui cai tanto a instalação nova (destino não existe) quanto a que veio de
   # um `scp` e por isso NÃO é um checkout git. O `git clone` direto no destino
