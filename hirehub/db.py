@@ -33,12 +33,11 @@ CREATE TABLE IF NOT EXISTS vagas (
   coleta        TEXT NOT NULL,
   -- Colunas desnormalizadas para busca sem acento (ver texto.chave_busca).
   busca_titulo  TEXT,
-  busca_local   TEXT
+  busca_local   TEXT,
+  -- "No ar" MATERIALIZADO, recalculado ao fim de cada coleta. Ver FORA_DO_AR e
+  -- atualizar_no_ar(). Vaga nova nasce no ar: acabou de ser vista.
+  no_ar         INTEGER NOT NULL DEFAULT 1
 );
-CREATE INDEX IF NOT EXISTS idx_publicada ON vagas(publicada_em DESC);
-CREATE INDEX IF NOT EXISTS idx_fonte ON vagas(fonte);
-CREATE INDEX IF NOT EXISTS idx_coleta ON vagas(coleta);
-CREATE INDEX IF NOT EXISTS idx_sem_descricao ON vagas(fonte) WHERE descricao IS NULL;
 
 -- Uma linha por conector. É a origem da página /status.
 CREATE TABLE IF NOT EXISTS fontes (
@@ -51,11 +50,25 @@ CREATE TABLE IF NOT EXISTS fontes (
   duracao       REAL,
   erro          TEXT,
   -- A fonte entrega tudo ou só uma janela? Decide se ela pode marcar vagas
-  -- como "saiu do ar". Ver fontes.Fonte.cobertura_completa e NO_AR.
+  -- como "saiu do ar". Ver fontes.Fonte.cobertura_completa e FORA_DO_AR.
   cobertura_completa INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS meta (chave TEXT PRIMARY KEY, valor TEXT);
+"""
+
+
+# Índices aplicados DEPOIS das migrações, não dentro do ESQUEMA: um índice
+# pode referenciar coluna que só existe após o ALTER, e num banco já em uso
+# isso falha com "no such column" antes de a migração rodar.
+INDICES = """
+CREATE INDEX IF NOT EXISTS idx_publicada ON vagas(publicada_em DESC);
+-- O índice que a listagem usa: filtra por no_ar e ordena por data, na ordem em
+-- que a consulta pede. Sem ele, cada página varre a tabela inteira.
+CREATE INDEX IF NOT EXISTS idx_no_ar_publicada ON vagas(no_ar, publicada_em DESC);
+CREATE INDEX IF NOT EXISTS idx_fonte ON vagas(fonte);
+CREATE INDEX IF NOT EXISTS idx_coleta ON vagas(coleta);
+CREATE INDEX IF NOT EXISTS idx_sem_descricao ON vagas(fonte) WHERE descricao IS NULL;
 """
 
 
@@ -67,6 +80,11 @@ MIGRACOES = [
     # porque cada coleta é um processo novo: em memória, a espera se perderia
     # e a rodada seguinte voltaria a bater na porta de quem já disse não.
     ("fontes", "bloqueado_ate", "TEXT"),
+    # Materializa o "no ar". Era calculado por consulta, com uma subconsulta
+    # correlacionada por linha: a 20 mil vagas custava 60ms, a 155 mil passava
+    # de 2 segundos com cache frio — e forçava varredura completa, impedindo
+    # qualquer índice. Agora é uma coluna, atualizada uma vez por coleta.
+    ("vagas", "no_ar", "INTEGER NOT NULL DEFAULT 1"),
 ]
 
 
@@ -90,6 +108,7 @@ def abrir(somente_leitura=False):
     con.executescript(ESQUEMA)
     con.row_factory = sqlite3.Row
     _migrar(con)
+    con.executescript(INDICES)
     return con
 
 
@@ -190,7 +209,7 @@ def pendentes_detalhe(con, fonte, limite):
     """Vagas da fonte que ainda nunca passaram pelo enriquecimento."""
     linhas = con.execute(
         "SELECT id, link FROM vagas WHERE fonte=? AND descricao IS NULL "
-        "ORDER BY publicada_em IS NULL, publicada_em DESC LIMIT ?",
+        "ORDER BY publicada_em DESC LIMIT ?",
         (fonte, limite),
     ).fetchall()
     return [dict(l) for l in linhas]
@@ -276,15 +295,37 @@ def status_fontes(con):
 #   * `cobertura_completa = 1`. Numa fonte com janela, a vaga some da coleta
 #     porque chegaram outras mais novas, não porque fechou. Medido: uma coleta
 #     só da Gupy tirou do ar 1.740 vagas publicadas nos últimos 3 dias, todas
-#     abertas. Fontes com janela nunca marcam nada como fora do ar — envelhecem
-#     por `esquecer_apos_dias`, e é só.
+#     abertas. Fontes com janela nunca marcam nada como fora do ar.
 #
-# O COALESCE é o que faz a segunda condição funcionar: a subconsulta não devolve
-# linha para fonte com janela (nem para fonte ainda sem registro, numa base
-# recém-criada), e aí a vaga é comparada consigo mesma — sempre no ar.
-NO_AR = ("vagas.coleta >= COALESCE((SELECT ultimo_ok FROM fontes "
-         "WHERE fontes.id = vagas.fonte AND fontes.cobertura_completa = 1), "
-         "vagas.coleta)")
+# Isto era um predicado avaliado EM TODA CONSULTA, com uma subconsulta
+# correlacionada por linha. A 20 mil vagas custava 60ms; a 155 mil passava de
+# 2 segundos com cache frio, e impedia qualquer índice porque forçava varredura
+# completa. Agora é uma coluna, recalculada uma vez por coleta — que é
+# exatamente quando o valor pode mudar.
+def atualizar_no_ar(con):
+    """Recalcula a coluna `no_ar`. Chamada ao fim da coleta, nunca na consulta.
+
+    Devolve quantas vagas estão fora do ar.
+
+    Dois UPDATEs simples em vez de um com subconsulta: a versão com `EXISTS`
+    correlacionado avaliava a subconsulta por linha e levava 22 segundos em 96
+    mil vagas. Estes dois usam índice e levam milissegundos — e só tocam nas
+    linhas que realmente mudam, o que também encurta o WAL.
+    """
+    marcos = con.execute(
+        "SELECT id, ultimo_ok FROM fontes "
+        "WHERE cobertura_completa = 1 AND ultimo_ok IS NOT NULL").fetchall()
+
+    # Tudo volta para "no ar"; em seguida, cada fonte exaustiva derruba o que
+    # não viu na última coleta bem-sucedida DELA. Fonte com janela nunca entra
+    # aqui — ausência ali não significa vaga encerrada.
+    con.execute("UPDATE vagas SET no_ar = 1 WHERE no_ar = 0")
+    for fonte, marco in marcos:
+        con.execute(
+            "UPDATE vagas SET no_ar = 0 WHERE fonte = ? AND coleta < ? AND no_ar = 1",
+            (fonte, marco))
+    con.commit()
+    return con.execute("SELECT COUNT(*) FROM vagas WHERE no_ar = 0").fetchone()[0]
 
 
 def _filtros(criterios):
@@ -293,7 +334,7 @@ def _filtros(criterios):
     # Ligado por padrão: quem chega ao site quer vaga aberta. Quem quiser o
     # histórico marca a opção, e aí o card avisa quais saíram do ar.
     if not criterios.get("incluir_fora_do_ar"):
-        onde.append(NO_AR)
+        onde.append("vagas.no_ar = 1")
 
     termo = texto.chave_busca(criterios.get("q"))
     if termo:
@@ -333,11 +374,15 @@ def buscar(con, criterios, pagina=0, por_pagina=POR_PAGINA):
         f"SELECT COUNT(*) FROM vagas WHERE {filtro}", valores).fetchone()[0]
     linhas = con.execute(
         f"""SELECT id, link, titulo, empresa, fonte, local, modalidade, salario,
-                   publicada_em, vista_em, {NO_AR} AS no_ar
+                   publicada_em, vista_em, no_ar
             FROM vagas WHERE {filtro}
-            -- Sem data vai para o fim: não dá para ordenar pelo critério que o
-            -- usuário escolheu se justamente esse dado não existe.
-            ORDER BY publicada_em IS NULL, publicada_em DESC, id
+            -- Sem data vai para o fim: não dá para ordenar pelo critério que
+            -- o usuário escolheu se justamente esse dado não existe. No SQLite
+            -- o DESC já põe NULL por último, então NÃO existe aqui um
+            -- `publicada_em IS NULL` — ele seria redundante, e pior: por ser
+            -- expressão, impedia o índice de servir à ordenação e obrigava um
+            -- B-tree temporário com as 95 mil linhas filtradas a cada página.
+            ORDER BY publicada_em DESC, id
             LIMIT ? OFFSET ?""",
         valores + [por_pagina, pagina * por_pagina],
     ).fetchall()
@@ -352,7 +397,7 @@ def por_id(con, id_vaga):
     esconde a informação de quem foi atrás dela; a página abre e avisa.
     """
     linha = con.execute(
-        f"SELECT *, {NO_AR} AS no_ar FROM vagas WHERE id = ?", (id_vaga,)).fetchone()
+        "SELECT * FROM vagas WHERE id = ?", (id_vaga,)).fetchone()
     return dict(linha) if linha else None
 
 
@@ -368,8 +413,8 @@ def relacionadas(con, vaga, limite=4):
     return [dict(l) for l in con.execute(
         f"""SELECT id, link, titulo, empresa, local, fonte, modalidade, salario,
                    publicada_em, 1 AS no_ar
-            FROM vagas WHERE busca_titulo LIKE ? AND id != ? AND {NO_AR}
-            ORDER BY publicada_em IS NULL, publicada_em DESC LIMIT ?""",
+            FROM vagas WHERE busca_titulo LIKE ? AND id != ? AND no_ar = 1
+            ORDER BY publicada_em DESC LIMIT ?""",
         (f"%{primeira[0]}%", vaga["id"], limite),
     ).fetchall()]
 
@@ -391,12 +436,12 @@ def contagens(con):
              - timedelta(hours=JANELA_NOVA_HORAS)).isoformat()
     try:
         total, novas, empresas, fora = con.execute(
-            f"""SELECT SUM({NO_AR}),
-                       SUM(({NO_AR}) AND publicada_em >= ?),
-                       COUNT(DISTINCT CASE WHEN ({NO_AR}) AND empresa != ''
-                                           THEN empresa END),
-                       SUM(NOT ({NO_AR}))
-                FROM vagas""", (corte,)).fetchone()
+            """SELECT SUM(no_ar),
+                      SUM(no_ar AND publicada_em >= ?),
+                      COUNT(DISTINCT CASE WHEN no_ar AND empresa != ''
+                                          THEN empresa END),
+                      SUM(NOT no_ar)
+               FROM vagas""", (corte,)).fetchone()
     except sqlite3.OperationalError:
         return dict(VAZIO)
     return {"total": total or 0, "novas": novas or 0,

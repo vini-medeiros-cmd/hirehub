@@ -211,6 +211,8 @@ class NoAr(unittest.TestCase):
         db.anotar_fonte(self.con, fonte, nome, ultima_coleta=carimbo,
                         ultimo_ok=carimbo, vagas=len(vagas), erro=None,
                         cobertura_completa=int(completa))
+        # A coleta real recalcula o "no ar" no fim; o teste simula o mesmo.
+        db.atualizar_no_ar(self.con)
 
     def test_fonte_com_janela_nunca_marca_vaga_como_fora_do_ar(self):
         """A regra que 1.740 vagas abertas da Gupy pagaram para existir.

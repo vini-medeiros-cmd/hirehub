@@ -576,6 +576,39 @@ acumulava, os mesmos 43 mil registros da Gupy levaram o pico a **552 MB** — a
 acrescentar muitos termos, é `LOTE_GRAVACAO` que controla o teto, não o
 tamanho da base.
 
+### Desempenho: o "no ar" é coluna, não predicado
+
+A base cresceu de 20 mil para 155 mil vagas, e com ela apareceu um problema que
+não existia antes. O "no ar" era calculado **em toda consulta**, com uma
+subconsulta correlacionada por linha — a 20 mil vagas custava 60ms, a 155 mil
+passava de 2 segundos com cache frio. Pior: por ser predicado, forçava
+varredura completa e impedia qualquer índice.
+
+Hoje é uma coluna (`vagas.no_ar`), recalculada ao fim de cada coleta — que é
+exatamente quando o valor pode mudar. Medido em 96 mil vagas:
+
+| | Antes | Depois |
+|---|---|---|
+| `/vagas` sem filtro | 549 ms | **7,5 ms** |
+| Home (contagens) | 588 ms | 307 ms |
+| Busca por termo | 460 ms | 268 ms |
+| Recálculo, 1× por coleta | — | 1,1 s |
+
+Duas armadilhas no caminho, ambas instrutivas:
+
+**O recálculo com `EXISTS` correlacionado levava 22 segundos.** Dois `UPDATE`
+simples, um por fonte exaustiva, levam 1,1s — usam índice e só tocam nas linhas
+que mudam.
+
+**`ORDER BY publicada_em IS NULL, publicada_em DESC` inutilizava o índice.** Por
+ser expressão, obrigava um B-tree temporário com as 95 mil linhas filtradas a
+cada página. E era redundante: no SQLite o `DESC` já põe NULL por último.
+Remover esse primeiro critério é o que rendeu os 7,5ms.
+
+A busca por texto continua em ~270ms porque `LIKE '%termo%'` não usa índice.
+Resolver isso pede FTS5 — mudança bem maior, e 270ms ainda está longe de
+incomodar.
+
 ### Backup
 
 A base acumula até `esquecer_apos_dias` (120) de histórico que as plataformas

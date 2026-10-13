@@ -283,6 +283,12 @@ def executar(apenas=None):
 
         removidas = db.podar(con, cfg["esquecer_apos_dias"])
 
+        # Só agora, com todas as fontes encerradas, dá para saber o que saiu do
+        # ar: o marco de cada fonte é o `ultimo_ok` que ela acabou de gravar.
+        # Recalcular aqui é o que permite as consultas lerem uma coluna em vez
+        # de avaliar um predicado caro em toda visita ao site.
+        fora = db.atualizar_no_ar(con)
+
         # Só agora, com a coleta concluída, este carimbo passa a valer como "o
         # que está no ar". Ver o comentário no topo do arquivo.
         db.gravar_meta(
