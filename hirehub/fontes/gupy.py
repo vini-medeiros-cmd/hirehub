@@ -8,11 +8,22 @@ de busca, só dá para alcançar as 10.000 vagas mais recentes (das ~84 mil
 publicadas). Como a API devolve em ordem de data, isso cobre os últimos dias —
 que é exatamente o que interessa a quem roda de 6 em 6 horas. Cada termo em
 `gupy_termos` abre uma janela de 10.000 adicional, para ir mais fundo numa área.
+
+MUDANÇA DE ENDEREÇO, 13/10/2026: a API saiu de
+`employability-portal.gupy.io/api/v1/jobs` para o endereço abaixo. O host
+antigo foi desativado inteiro — devolve 404 do nginx até na raiz, não só na
+rota. Encontrado lendo as requisições do próprio portal no navegador, que é o
+que vale quando um endpoint some: chutar variações de URL não achou nada.
+
+A API nova é quase idêntica — mesmo formato, mesmos parâmetros, mesmos tetos, e
+a descrição continua vindo na listagem. Três campos sumiram (`country`,
+`isRemoteWork`, `companyName`), e nenhum fazia falta: `state` e `workplaceType`
+cobrem o que eles davam.
 """
 from .. import net, texto
 from . import Fonte, registrar
 
-API = "https://employability-portal.gupy.io/api/v1/jobs"
+API = "https://portal.gupy.io/api/job-search/jobs"
 PAGINA = 100
 MAX_OFFSET = 10_000  # teto da API, não escolha nossa
 
@@ -77,11 +88,13 @@ class Gupy(Fonte):
         return {
             "link": link,
             "titulo": (bruta.get("name") or "").strip(),
-            "empresa": (bruta.get("careerPageName") or bruta.get("companyName") or "").strip(),
+            "empresa": (bruta.get("careerPageName") or "").strip(),
             "fonte": "gupy",
-            "local": texto.local(bruta.get("city"), bruta.get("state"), bruta.get("country")),
-            "modalidade": texto.modalidade(
-                "remote" if bruta.get("isRemoteWork") else bruta.get("workplaceType")),
+            # Sem `country`: a API nova não manda, e todas as vagas são do Brasil.
+            "local": texto.local(bruta.get("city"), bruta.get("state")),
+            # Sem o atalho por `isRemoteWork`, que também sumiu — o
+            # `workplaceType` já trazia "remote" nesses casos.
+            "modalidade": texto.modalidade(bruta.get("workplaceType")),
             "salario": "",
             "descricao": texto.texto_de_html(bruta.get("description")),
             "publicada_em": texto.data_iso(bruta.get("publishedDate")),

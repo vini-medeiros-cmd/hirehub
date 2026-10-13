@@ -126,6 +126,31 @@ tecnologia. Entra por complementar o catálogo onde as generalistas são fracas,
 não por volume. A listagem já traz `published_at`, o que a Vagas.com.br e o
 InfoJobs só entregam com uma requisição por vaga.
 
+### Quando uma fonte parar de responder
+
+Já aconteceu duas vezes, e das duas o sintoma foi o mesmo: `/status` mostrando
+**Sem retorno**, sem erro nenhum no log. Uma fonte que devolve zero não quebra
+a coleta — é tratada como resposta legítima, e as vagas que ela já trouxe
+continuam no ar até `esquecer_apos_dias`. O site degrada em silêncio.
+
+O roteiro que funcionou nos dois casos:
+
+1. **Bata no endpoint direto.** O código de resposta já separa os casos:
+   `404` é endereço que sumiu, `200` com zero itens é API esvaziada ou
+   reescrita, `403`/`429` é bloqueio.
+2. **Não chute variações de URL.** Nas duas vezes isso não achou nada.
+3. **Abra o portal no navegador e leia as requisições de rede.** É assim que se
+   encontra o endereço novo, porque é o que o próprio site usa.
+
+| Quando | Fonte | O que era |
+|---|---|---|
+| 03/09/2026 | Sólides | portal reescrito em Next.js; API antiga desligada e a nova não serve (sem link por vaga) |
+| 13/10/2026 | Gupy | API mudou de host e caminho; host antigo devolve 404 até na raiz |
+
+A Gupy foi um `sed` numa linha — a API nova é quase idêntica. A Sólides não
+teve conserto. Vale sempre descobrir **qual dos dois casos é** antes de
+assumir o pior.
+
 ### Plataformas avaliadas e descartadas
 
 Registro completo das 19 plataformas testadas contra o endpoint real, para
