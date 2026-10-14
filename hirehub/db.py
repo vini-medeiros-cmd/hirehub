@@ -216,14 +216,20 @@ def pendentes_detalhe(con, fonte, limite):
 
 
 def podar(con, dias):
-    """Remove vagas que sumiram da origem e já estão velhas.
+    """Remove vagas que a origem não mostra há `dias`.
 
     Vaga fora do ar continua listada por um tempo de propósito: se ela sumisse
     da base no instante em que sai da API, um anúncio publicado e despublicado
     entre duas coletas nunca teria existido para quem usa o site.
+
+    O corte é por `coleta` — a última vez que a vaga foi VISTA —, não por
+    `vista_em`, que é quando ela ENTROU e nunca muda. Usar `vista_em` apagava
+    por idade em vez de por ausência: uma vaga aberta havia mais de `dias`,
+    coletada na mesma manhã, era removida junto com as mortas. O docstring
+    antigo já dizia "vagas que sumiram da origem"; a condição é que não dizia.
     """
     corte = (datetime.now(timezone.utc) - timedelta(days=dias)).isoformat()
-    cur = con.execute("DELETE FROM vagas WHERE vista_em < ?", (corte,))
+    cur = con.execute("DELETE FROM vagas WHERE coleta < ?", (corte,))
     con.commit()
     return cur.rowcount
 

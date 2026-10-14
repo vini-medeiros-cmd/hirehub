@@ -386,6 +386,18 @@ qual plataforma quebrar:
 
 ### Decisões que valem saber
 
+**Como uma vaga sai.** São dois estágios, e só o segundo apaga:
+
+1. **Sai do ar** — a fonte deixou de mostrá-la. A vaga continua no banco e na
+   página dela, com aviso; some só da listagem padrão. Vale apenas para fontes
+   de cobertura exaustiva (ver acima).
+2. **Sai do banco** — a poda remove o que a origem não mostra há
+   `esquecer_apos_dias` (120). O corte é por `coleta`, a última vez que a vaga
+   foi VISTA, e não por `vista_em`, que é quando ela ENTROU e nunca muda.
+   A diferença não é sutil: podar por `vista_em` apagava por **idade** em vez
+   de por **ausência**, e uma vaga aberta há mais de 120 dias, coletada na
+   mesma manhã, sumia junto com as mortas.
+
 **A base acumula.** Cada coleta acrescenta; nada é substituído.
 
 **Uma fonte que falha não derruba as outras.** Cada conector roda no seu try, e

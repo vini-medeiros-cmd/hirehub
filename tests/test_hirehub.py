@@ -144,10 +144,32 @@ class Banco(unittest.TestCase):
         self.assertIsNotNone(vagas[0]["publicada_em"])
         self.assertIsNone(vagas[-1]["publicada_em"])
 
-    def test_podar_remove_so_o_que_e_velho(self):
-        db.salvar(self.con, [_vaga()], "2020-01-01T00:00:00+00:00")
+    def _quando(self, dias):
+        from datetime import datetime, timedelta, timezone
+        return (datetime.now(timezone.utc) - timedelta(days=dias)).isoformat()
+
+    def test_podar_remove_o_que_a_origem_nao_mostra_mais(self):
+        db.salvar(self.con, [_vaga()], self._quando(90))
         db.salvar(self.con, [_vaga(link="https://x/2")], texto.agora_iso())
         self.assertEqual(db.podar(self.con, 60), 1)
+        self.assertEqual(db.contagens(self.con)["total"], 1)
+
+    def test_podar_nao_apaga_vaga_antiga_que_continua_no_ar(self):
+        """A poda é por AUSÊNCIA, não por idade.
+
+        Uma vaga pode estar aberta há meses e ser coletada todo dia. Podar por
+        `vista_em` — a data de entrada, que nunca muda — apagava essas junto
+        com as mortas: uma vaga coletada na mesma manhã sumia por ter entrado
+        há mais de `esquecer_apos_dias`. O corte certo é `coleta`, a última vez
+        que ela foi vista.
+        """
+        db.salvar(self.con, [_vaga()], self._quando(130))   # entrou há 130 dias
+        db.salvar(self.con, [_vaga()], texto.agora_iso())   # e foi vista agora
+
+        linha = db.por_id(self.con, texto.id_da_vaga(_vaga()["link"]))
+        self.assertLess(linha["vista_em"], self._quando(120), "entrou faz tempo")
+
+        self.assertEqual(db.podar(self.con, 120), 0, "está no ar; não pode sair")
         self.assertEqual(db.contagens(self.con)["total"], 1)
 
 
