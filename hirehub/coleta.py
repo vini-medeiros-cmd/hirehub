@@ -302,9 +302,10 @@ def executar(apenas=None):
 
         # Contado aqui, uma vez, para o rodapé do site não varrer a base a cada
         # página só para imprimir um número. Ver db.contagens_rapidas().
-        contagens = db.contagens(con)
+        contagens = db.contagens_completas(con)
         db.gravar_meta(con, vagasNoAr=contagens["total"],
-                       vagasForaDoAr=contagens["fora_do_ar"])
+                       vagasForaDoAr=contagens["fora_do_ar"],
+                       empresas=contagens["empresas"])
 
         no_banco = con.execute("SELECT COUNT(*) FROM vagas").fetchone()[0]
         con.execute("VACUUM")

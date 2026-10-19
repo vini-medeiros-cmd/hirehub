@@ -374,10 +374,23 @@ def _filtros(criterios):
     return " AND ".join(onde), valores
 
 
+def _sem_filtro_do_usuario(criterios):
+    return not any(criterios.get(c) for c in
+                   ("q", "local", "modalidade", "fonte", "dias",
+                    "incluir_fora_do_ar"))
+
+
 def buscar(con, criterios, pagina=0, por_pagina=POR_PAGINA):
     filtro, valores = _filtros(criterios)
-    total = con.execute(
-        f"SELECT COUNT(*) FROM vagas WHERE {filtro}", valores).fetchone()[0]
+
+    # Sem nenhum filtro, o total É o que a coleta já contou — não há por que
+    # recontar. É o caso da /vagas aberta direto, a página mais visitada, e
+    # recontar ali significava percorrer 200 mil linhas que não cabem no cache.
+    if _sem_filtro_do_usuario(criterios):
+        total = contagens(con)["total"]
+    else:
+        total = con.execute(
+            f"SELECT COUNT(*) FROM vagas WHERE {filtro}", valores).fetchone()[0]
     linhas = con.execute(
         f"""SELECT id, link, titulo, empresa, fonte, local, modalidade, salario,
                    publicada_em, vista_em, no_ar
@@ -428,15 +441,14 @@ def relacionadas(con, vaga, limite=4):
 VAZIO = {"total": 0, "novas": 0, "empresas": 0, "fora_do_ar": 0}
 
 
-def contagens(con):
-    """Números da home, numa varredura só.
+def contagens_completas(con):
+    """Recalcula tudo varrendo a tabela. Chamada SÓ ao fim da coleta.
 
-    Contam apenas o que está no ar: anunciar "19.870 vagas" e entregar uma
-    listagem com menos seria mentir no primeiro número que o visitante lê.
-
-    As quatro contas cabem num SELECT porque a base inteira precisa ser
-    percorrida de qualquer jeito — o predicado de "no ar" não é indexável. Em
-    consultas separadas eram quatro varreduras de ~60ms cada; numa só, 86ms.
+    `COUNT(DISTINCT empresa)` precisa ler a coluna `empresa` de TODAS as
+    linhas. Medido com cache quente: 250ms. Na VPS, com 688 MB de banco e 945
+    MB de RAM, a tabela não cabe no cache: a varredura vira leitura de disco e
+    chegou a 32 segundos com uma coleta disputando o mesmo disco — o bastante
+    para o nginx desistir e devolver 504.
     """
     corte = (datetime.now(timezone.utc)
              - timedelta(hours=JANELA_NOVA_HORAS)).isoformat()
@@ -454,17 +466,31 @@ def contagens(con):
             "empresas": empresas or 0, "fora_do_ar": fora or 0}
 
 
-def contagens_rapidas(con):
-    """O mesmo, mas lido do que a última coleta deixou anotado.
+def contagens(con):
+    """Números do site. Baratos: três vêm da coleta, um é consultado.
 
-    O rodapé mostra o total em TODAS as páginas. Varrer 20 mil linhas para
-    imprimir um número no rodapé de uma página institucional é desperdício:
-    esse total só muda quando uma coleta termina, que é exatamente quando ele é
-    gravado. A home continua usando contagens(), porque ali os números são o
-    conteúdo, não um detalhe do rodapé.
+    Três dos quatro só mudam quando uma coleta termina, então ficam em `meta`.
+    O quarto — "publicadas nas últimas 24h" — anda sozinho com o relógio e
+    ficaria errado guardado, mas custa 0,1ms: `idx_no_ar_publicada` cobre
+    exatamente esse filtro.
+
+    Vale para a home E para o rodapé. Antes a home varria a tabela inteira a
+    cada visita, e numa base que não cabe na RAM isso é ida ao disco.
     """
     meta = ler_meta(con)
     if "vagasNoAr" not in meta:
-        return contagens(con)
-    return {**VAZIO, "total": int(meta.get("vagasNoAr") or 0),
-            "fora_do_ar": int(meta.get("vagasForaDoAr") or 0)}
+        return contagens_completas(con)   # base nova, ainda sem coleta
+    corte = (datetime.now(timezone.utc)
+             - timedelta(hours=JANELA_NOVA_HORAS)).isoformat()
+    try:
+        novas = con.execute(
+            "SELECT COUNT(*) FROM vagas WHERE no_ar = 1 AND publicada_em >= ?",
+            (corte,)).fetchone()[0]
+    except sqlite3.OperationalError:
+        novas = 0
+    return {
+        "total": int(meta.get("vagasNoAr") or 0),
+        "novas": novas,
+        "empresas": int(meta.get("empresas") or 0),
+        "fora_do_ar": int(meta.get("vagasForaDoAr") or 0),
+    }

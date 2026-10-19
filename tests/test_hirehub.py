@@ -173,6 +173,58 @@ class Banco(unittest.TestCase):
         self.assertEqual(db.contagens(self.con)["total"], 1)
 
 
+class ContagensBaratas(unittest.TestCase):
+    """A home não pode varrer a tabela a cada visita.
+
+    Na VPS, com 688 MB de banco e 945 MB de RAM, a tabela não cabe no cache: a
+    varredura virava leitura de disco e a home chegou a 32 segundos — nginx
+    desiste em 30 e devolve 504. `COUNT(DISTINCT empresa)` era o caro.
+    """
+
+    def setUp(self):
+        config.BANCO.unlink(missing_ok=True)
+        self.con = db.abrir()
+        db.salvar(self.con, [
+            _vaga(link="https://x/1", empresa="Alfa"),
+            _vaga(link="https://x/2", empresa="Beta"),
+            _vaga(link="https://x/3", empresa="Alfa"),
+        ], texto.agora_iso())
+
+    def tearDown(self):
+        self.con.close()
+
+    def test_cacheadas_batem_com_o_calculo_completo(self):
+        cheia = db.contagens_completas(self.con)
+        db.gravar_meta(self.con, vagasNoAr=cheia["total"],
+                       vagasForaDoAr=cheia["fora_do_ar"], empresas=cheia["empresas"])
+        barata = db.contagens(self.con)
+        for campo in ("total", "empresas", "fora_do_ar", "novas"):
+            self.assertEqual(barata[campo], cheia[campo], campo)
+        self.assertEqual(barata["empresas"], 2, "Alfa e Beta")
+
+    def test_sem_meta_cai_para_o_calculo_completo(self):
+        """Base nova, antes da primeira coleta: tem de funcionar mesmo assim."""
+        self.assertEqual(db.contagens(self.con)["total"], 3)
+
+    def test_listagem_sem_filtro_usa_o_total_ja_contado(self):
+        cheia = db.contagens_completas(self.con)
+        db.gravar_meta(self.con, vagasNoAr=cheia["total"],
+                       vagasForaDoAr=cheia["fora_do_ar"], empresas=cheia["empresas"])
+        self.assertEqual(db.buscar(self.con, {})[0], 3)
+        # Com filtro, o total tem de ser recontado de verdade.
+        self.assertEqual(db.buscar(self.con, {"q": "analista"})[0], 3)
+        self.assertEqual(db.buscar(self.con, {"q": "inexistente"})[0], 0)
+
+    def test_novas_e_ao_vivo_e_nao_vem_do_cache(self):
+        """"Publicadas nas últimas 24h" anda com o relógio: guardar erraria."""
+        db.gravar_meta(self.con, vagasNoAr=999, vagasForaDoAr=0, empresas=0)
+        recente = texto.agora_iso()
+        db.salvar(self.con, [_vaga(link="https://x/9", publicada_em=recente)],
+                  texto.agora_iso())
+        self.assertEqual(db.contagens(self.con)["total"], 999, "esse vem do cache")
+        self.assertEqual(db.contagens(self.con)["novas"], 1, "esse é consultado")
+
+
 class Conectores(unittest.TestCase):
     def test_todos_se_registram_com_contrato_valido(self):
         registradas = fontes.todas()

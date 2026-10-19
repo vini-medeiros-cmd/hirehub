@@ -113,8 +113,6 @@ class Handler(BaseHTTPRequestHandler):
 
     def _pagina(self, con, ctx, caminho, params):
         if caminho == "/":
-            # Só a home paga a varredura: ali os números SÃO o conteúdo.
-            ctx["contagens"] = db.contagens(con)
             _, recentes = db.buscar(con, {}, pagina=0, por_pagina=6)
             return paginas.home(ctx, recentes, ctx["status_fontes"]),
 
@@ -159,7 +157,7 @@ class Handler(BaseHTTPRequestHandler):
             "rota": rota,
             "agora": datetime.now(paginas.FUSO),
             "meta": db.ler_meta(con),
-            "contagens": db.contagens_rapidas(con),
+            "contagens": db.contagens(con),
             "status_fontes": db.status_fontes(con),
             "fontes_registradas": registradas,
             "fontes_por_id": {f.id: f.nome for f in registradas},
