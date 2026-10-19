@@ -431,26 +431,60 @@ class Enriquecimento(unittest.TestCase):
         self.coleta._enriquecer(self.con, self.fonte, self.cfg)
         self.assertEqual(db.pendentes_detalhe(self.con, "infojobs", 10), [])
 
+    def test_teto_zero_significa_zero_e_nao_o_global(self):
+        """`or` tratava 0 como "não definido" e caía no global.
+
+        Isso impedia uma fonte de dizer "não me enriqueça" — exatamente o que a
+        Vagas.com.br precisa dizer, depois de três bloqueios de 24h.
+        """
+        self.assertEqual(self.coleta._teto(0, 400), 0)
+        self.assertEqual(self.coleta._teto(None, 400), 400, "None usa o global")
+        self.assertEqual(self.coleta._teto(120, 400), 120, "menor dos dois")
+        self.assertEqual(self.coleta._teto(900, 400), 400, "nunca sobe do global")
+
+    def test_fonte_com_teto_zero_nao_e_enriquecida(self):
+        chamadas = []
+        self._com_detalhar(lambda vaga: chamadas.append(vaga) or {"descricao": "x"})
+        apagada = {**self.cfg, "detalhes_por_execucao": 400}
+
+        original = self.fonte.__class__.detalhes_por_execucao
+        self.fonte.__class__.detalhes_por_execucao = 0
+        try:
+            self.assertEqual(
+                self.coleta._enriquecer(self.con, self.fonte, apagada), 0)
+        finally:
+            self.fonte.__class__.detalhes_por_execucao = original
+        self.assertEqual(chamadas, [], "não pode ter buscado nada")
+        self.assertEqual(len(db.pendentes_detalhe(self.con, "infojobs", 10)), 3,
+                         "seguem pendentes, para o dia em que religar")
+
+    def test_vagas_com_br_esta_com_enriquecimento_desligado(self):
+        """Decisão deliberada, não acidente — ver o comentário no conector."""
+        vagas = fontes.por_id("vagas")
+        self.assertEqual(vagas.detalhes_por_execucao, 0)
+        self.assertIsNotNone(vagas.detalhar, "o método fica, para religar fácil")
+        # As outras continuam sendo enriquecidas normalmente.
+        for outra in ("infojobs", "inhire", "trampos"):
+            self.assertNotEqual(fontes.por_id(outra).detalhes_por_execucao, 0, outra)
+
     def test_fonte_pode_baixar_o_proprio_teto_mas_nao_subir(self):
         """`threads` e `detalhes_por_execucao` do conector são limites, não
-        permissões: a Vagas.com.br precisa ir mais devagar que o global, e
-        nenhuma fonte pode decidir ir mais rápido."""
+        permissões: uma fonte pode pedir para ir mais devagar que o global, e
+        nenhuma pode decidir ir mais rápido."""
+        trampos = fontes.por_id("trampos")
+        self.assertIsNotNone(trampos.detalhes_por_execucao)
+
+        # Global folgado: vale o teto da fonte.
+        self.assertEqual(self.coleta._teto(trampos.detalhes_por_execucao, 400),
+                         trampos.detalhes_por_execucao)
+        # Global apertado: vale o global.
+        self.assertEqual(self.coleta._teto(trampos.detalhes_por_execucao, 10), 10)
+
         vagas = fontes.por_id("vagas")
         self.assertLess(vagas.threads, config.PADROES["threads"],
                         "a Vagas.com.br precisa ir mais devagar que o global")
-
-        # Global folgado: vale o teto da fonte.
-        folgado = {"threads": 6, "detalhes_por_execucao": 400}
-        self.assertEqual(min(folgado["threads"], vagas.threads), vagas.threads)
-        self.assertEqual(min(folgado["detalhes_por_execucao"],
-                             vagas.detalhes_por_execucao), vagas.detalhes_por_execucao)
-
-        # Global apertado: vale o global — a fonte não usa o próprio número
-        # para ir mais rápido do que a configuração permite.
-        apertado = {"threads": 1, "detalhes_por_execucao": 10}
-        self.assertEqual(min(apertado["threads"], vagas.threads), 1)
-        self.assertEqual(
-            min(apertado["detalhes_por_execucao"], vagas.detalhes_por_execucao), 10)
+        self.assertEqual(self.coleta._teto(vagas.threads, 6), vagas.threads)
+        self.assertEqual(self.coleta._teto(vagas.threads, 1), 1)
 
 
 class LimiteDeTaxa(unittest.TestCase):

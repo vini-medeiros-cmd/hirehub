@@ -95,24 +95,39 @@ A listagem nacional (`/vagas-de-emprego`) é uma seleção curada de ~120 vagas;
 catálogo real só é alcançável por cidade. Medido: São Paulo tem 992 vagas
 alcançáveis, 40 por página, paginação até o fim sem repetir.
 
-**Ela está atrás de Cloudflare e não avisa antes de bloquear.** Foram dois
-`429` com `Retry-After` de 24 horas até os limites certos aparecerem:
+**Ela está atrás de Cloudflare, e o enriquecimento dela está DESLIGADO.** Foram
+três bloqueios de 24h até ficar claro que não ia convergir:
 
-1. 968 páginas de detalhe a 8 threads. Reduzido para 2 threads e 120 detalhes.
-2. Bloqueou de novo. **Limitar thread não limita taxa** — duas threads sem
-   pausa ainda disparam várias requisições por segundo, e é por intervalo de
-   tempo que um Cloudflare conta.
+| Tentativa | Configuração | Resultado |
+|---|---|---|
+| 1ª | 968 detalhes, 8 threads | `429`, `Retry-After` de 24h |
+| 2ª | 120 detalhes, 2 threads | bloqueou igual |
+| 3ª | 120 detalhes, 1 req/s | bloqueou após ~76 requisições |
 
-Daí `req_por_segundo = 1`, implementado com relógio compartilhado entre as
-threads (`net.Ritmo`): o espaçamento vale para o conjunto, não por thread.
+A segunda tentativa ensinou que **limitar thread não limita taxa** — duas
+threads sem pausa ainda disparam várias requisições por segundo, e é por
+intervalo de tempo que um Cloudflare conta. Daí `req_por_segundo`, com relógio
+compartilhado entre as threads (`net.Ritmo`).
 
-O segundo bloqueio ensinou outra coisa: **listagem e detalhe disputam o mesmo
-orçamento**. Ampliar as cidades desta fonte reduziu o enriquecimento, e como a
-data dela só vem do detalhe, o resultado foram 2.102 vagas sem data afundando
-na ordenação. Por isso ela fica em 12 cidades enquanto o InfoJobs vai a 25.
+A terceira ensinou que não adiantava: a cada rodada eram algumas dezenas de
+detalhes e mais 24h de castigo. O acervo nunca completaria.
+
+Hoje `detalhes_por_execucao = 0` desliga só o enriquecimento. **A listagem
+continua** — ~930 vagas por coleta, sem bloqueio. O preço é que essas vagas
+ficam sem data e sem descrição, porque as duas só existem no detalhe: aparecem
+na busca, mas afundam na ordenação e a página delas manda ler na origem. São
+0,5% da base.
+
+`detalhar` continua implementado de propósito. Se a origem afrouxar, religar é
+trocar o zero por um número.
+
+Também ficou a lição de que **listagem e detalhe disputam o mesmo orçamento**:
+ampliar as cidades desta fonte reduzia o enriquecimento. Por isso ela fica em
+12 cidades enquanto o InfoJobs vai a 25.
 
 Os tetos da fonte são limites, nunca permissões — se a configuração global for
-mais apertada, vale a global.
+mais apertada, vale a global. E `0` significa zero, não "use o global": era um
+`or` que tratava 0 como ausente, e impedia justamente este caso.
 
 ### Trampos.co: pequena, mas a única com API aberta
 

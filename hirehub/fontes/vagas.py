@@ -51,26 +51,30 @@ class Vagas(Fonte):
     site = BASE
     cobertura_completa = False
 
-    # Cloudflare, e o que ela mede é TAXA — não paralelismo. Isso custou dois
-    # bloqueios de 24h para ficar claro:
+    # ENRIQUECIMENTO DESLIGADO, 19/10/2026. Foram três bloqueios de 24h:
     #
-    #   1º) 968 detalhes a 8 threads. Reduzi para 2 threads e 120 detalhes.
-    #   2º) mesmo assim. A listagem tinha crescido para 192 requisições, e ela
-    #       sozinha já gastava o orçamento: sobraram 16 detalhes antes do 429.
+    #   1º) 968 detalhes a 8 threads.
+    #   2º) 2 threads e 120 detalhes. Bloqueou igual — limitar thread não
+    #       limita taxa, e é por intervalo de tempo que um Cloudflare conta.
+    #   3º) 1 req/s e 120 detalhes. Bloqueou após ~76 requisições (60 de
+    #       listagem + 16 de detalhe).
     #
-    # Limitar thread não conteve porque 2 threads sem pausa ainda disparam
-    # várias requisições por segundo. `req_por_segundo` é o que realmente
-    # importa aqui — uma por segundo, somando listagem e detalhe.
+    # O limite dela é mais apertado do que qualquer calibragem que tentei, ou
+    # o IP já está marcado pelas vezes anteriores. De um jeito ou de outro, o
+    # enriquecimento nunca ia convergir: a cada rodada, algumas dezenas de
+    # detalhes e mais 24h de castigo.
     #
-    # E o segundo bloqueio ensinou outra coisa: nesta fonte, listagem e detalhe
-    # disputam o MESMO orçamento. Ampliar a listagem aqui reduz o
-    # enriquecimento, e como a data desta fonte só vem do detalhe, vagas sem
-    # detalhe entram sem data e afundam na ordenação. Mais vagas piores não é
-    # ganho — por isso as cidades dela ficam nas 12 originais, enquanto o
-    # InfoJobs (que não reclama) foi para 25.
+    # `detalhes_por_execucao = 0` desliga só o enriquecimento. A LISTAGEM
+    # continua, e funciona bem — ~930 vagas por coleta, sem bloqueio. O preço
+    # é que essas vagas ficam sem data e sem descrição, porque as duas só
+    # existem no detalhe: aparecem na busca, mas afundam na ordenação e a
+    # página delas manda ler na origem.
+    #
+    # `detalhar` continua implementado de propósito. Se um dia a origem
+    # afrouxar, religar é trocar este zero por um número.
     threads = 2
-    detalhes_por_execucao = 120
     req_por_segundo = 1
+    detalhes_por_execucao = 0
 
     def coletar(self, cfg, log):
         paginas = int(cfg.get("vagas_paginas_por_cidade") or 0)

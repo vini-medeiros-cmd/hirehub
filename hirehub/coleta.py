@@ -109,6 +109,16 @@ def _horas_ate(fonte, cfg, linha):
     return max(0.0, intervalo - passadas - 0.5)
 
 
+def _teto(do_conector, global_):
+    """Menor entre o teto da fonte e o global. None na fonte = usa o global.
+
+    `is not None`, e não `or`: com `or`, o valor 0 era tratado como "não
+    definido" e caía no global — então era impossível uma fonte dizer "zero".
+    É exatamente o que a Vagas.com.br precisa dizer sobre enriquecimento.
+    """
+    return global_ if do_conector is None else min(global_, do_conector)
+
+
 def _threads_de(fonte, cfg):
     """O teto da fonte vale para a coleta também, não só para o enriquecimento.
 
@@ -116,7 +126,7 @@ def _threads_de(fonte, cfg):
     threads justamente por ter respondido 429 — varrer a listagem a 6. O
     conector pedia cuidado numa etapa e era ignorado na outra.
     """
-    return min(cfg["threads"], fonte.threads or cfg["threads"])
+    return _teto(fonte.threads, cfg["threads"])
 
 
 # Vagas acumuladas em memória antes de ir para o banco.
@@ -190,8 +200,9 @@ def _enriquecer(con, fonte, cfg):
     """
     if not fonte.detalhar:
         return 0
-    teto = min(cfg["detalhes_por_execucao"],
-               fonte.detalhes_por_execucao or cfg["detalhes_por_execucao"])
+    teto = _teto(fonte.detalhes_por_execucao, cfg["detalhes_por_execucao"])
+    if teto <= 0:
+        return 0   # fonte pediu para não ser enriquecida; ver o conector
     pendentes = db.pendentes_detalhe(con, fonte.id, teto)
     if not pendentes:
         return 0
